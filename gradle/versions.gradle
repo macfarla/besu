@@ -189,7 +189,7 @@ dependencyManagement {
 
     dependency 'org.junit.vintage:junit-vintage-engine:5.10.1'
 
-    dependencySet(group: 'org.jupnp', version:'2.7.1') {
+    dependencySet(group: 'org.jupnp', version:'3.0.0') {
       entry 'org.jupnp.support'
       entry 'org.jupnp'
     }

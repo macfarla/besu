@@ -29,6 +29,10 @@
       "moduleLicenseUrl" : "https://oss.oracle.com/licenses/CDDL-1.1"
     },
     {
+      "moduleLicense" : "CDDL-1.0",
+      "moduleLicenseUrl" : "https://opensource.org/license/cddl-1-0"
+    },
+    {
       "moduleLicense": "Eclipse Distribution License - v 1.0",
       "moduleLicenseUrl": "http://www.eclipse.org/legal/epl-v10.html"
     },
