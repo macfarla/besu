@@ -34,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.jupnp.DefaultUpnpServiceConfiguration;
 import org.jupnp.UpnpService;
 import org.jupnp.UpnpServiceImpl;
 import org.jupnp.model.action.ActionInvocation;
@@ -73,15 +74,7 @@ public class UpnpNatManager extends AbstractNatManager {
 
   /** Empty constructor. Creates in instance of UpnpServiceImpl. */
   public UpnpNatManager() {
-    // this(new UpnpServiceImpl(new DefaultUpnpServiceConfiguration()));
-
-    // Workaround for an issue in the jupnp library: the ExecutorService used misconfigures
-    // its ThreadPoolExecutor, causing it to only launch a single thread. This prevents any work
-    // from getting done (effectively a deadlock). The issue is fixed here:
-    //   https://github.com/jupnp/jupnp/pull/117
-    // However, this fix has not made it into any releases yet.
-    // TODO: once a new release is available, remove this @Override
-    this(new UpnpServiceImpl(new BesuUpnpServiceConfiguration()));
+    this(new UpnpServiceImpl(new DefaultUpnpServiceConfiguration()));
   }
 
   /**
