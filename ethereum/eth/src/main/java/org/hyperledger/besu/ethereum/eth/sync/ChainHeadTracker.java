@@ -126,7 +126,7 @@ public class ChainHeadTracker implements ConnectCallback {
         if (retries > 0) {
           LOG.atDebug()
               .setMessage(
-                  "Failed to retrieve chain head info from {}. Reason: {}. {} retires left}")
+                  "Failed to retrieve chain head info from {}. Reason: {}. {} retries left}")
               .addArgument(peer::getLoggableId)
               .addArgument(() -> getReason(peerResult, error))
               .addArgument(() -> retries)
@@ -141,7 +141,6 @@ public class ChainHeadTracker implements ConnectCallback {
               .setMessage(
                   "Failed to retrieve chain head info from {}. Disconnecting after "
                       + MAX_RETRIES
-                      + 1
                       + " tries. Reason: {}.")
               .addArgument(peer::getLoggableId)
               .addArgument(() -> getReason(peerResult, error))
