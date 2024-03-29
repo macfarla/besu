@@ -94,13 +94,6 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     this.protocolContext = protocolContext;
     this.terminationCondition = terminationCondition;
 
-    ChainHeadTracker.trackChainHeadForPeers(
-        ethContext,
-        protocolSchedule,
-        protocolContext.getBlockchain(),
-        this::calculateTrailingPeerRequirements,
-        metricsSystem);
-
     this.blockPropagationManager =
         terminationCondition.shouldStopDownload()
             ? Optional.empty()
