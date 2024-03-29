@@ -20,6 +20,7 @@ import static org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMes
 
 import org.hyperledger.besu.ethereum.eth.messages.EthPV62;
 
+import org.hyperledger.besu.ethereum.p2p.peers.Peer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -36,17 +37,14 @@ public class PeerReputationTest {
 
   @Test
   public void shouldOnlyDisconnectWhenTimeoutLimitReached() {
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
+    sendRequestTimeouts(EthPV62.GET_BLOCK_HEADERS, PeerReputation.TIMEOUT_THRESHOLD - 1);
     assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).contains(TIMEOUT);
   }
 
   @Test
   public void shouldTrackTimeoutsSeparatelyForDifferentRequestTypes() {
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_BODIES)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_BODIES)).isEmpty();
+    sendRequestTimeouts(EthPV62.GET_BLOCK_HEADERS, PeerReputation.TIMEOUT_THRESHOLD - 1);
+    sendRequestTimeouts(EthPV62.GET_BLOCK_BODIES, PeerReputation.TIMEOUT_THRESHOLD - 1);
 
     assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).contains(TIMEOUT);
     assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_BODIES)).contains(TIMEOUT);
@@ -54,11 +52,8 @@ public class PeerReputationTest {
 
   @Test
   public void shouldResetTimeoutCountForRequestType() {
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
-
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_BODIES)).isEmpty();
-    assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_BODIES)).isEmpty();
+    sendRequestTimeouts(EthPV62.GET_BLOCK_HEADERS, PeerReputation.TIMEOUT_THRESHOLD - 1);
+    sendRequestTimeouts(EthPV62.GET_BLOCK_BODIES, PeerReputation.TIMEOUT_THRESHOLD - 1);
 
     reputation.resetTimeoutCount(EthPV62.GET_BLOCK_HEADERS);
     assertThat(reputation.recordRequestTimeout(EthPV62.GET_BLOCK_HEADERS)).isEmpty();
@@ -67,20 +62,14 @@ public class PeerReputationTest {
 
   @Test
   public void shouldOnlyDisconnectWhenEmptyResponseThresholdReached() {
-    assertThat(reputation.recordUselessResponse(1001)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1002)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1003)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1004)).isEmpty();
+    sendUselessResponses(1001, PeerReputation.USELESS_RESPONSE_THRESHOLD - 1);
     assertThat(reputation.recordUselessResponse(1005)).contains(USELESS_PEER);
   }
 
   @Test
   public void shouldDiscardEmptyResponseRecordsAfterTimeWindowElapses() {
     // Bring it to the brink of disconnection.
-    assertThat(reputation.recordUselessResponse(1001)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1002)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1003)).isEmpty();
-    assertThat(reputation.recordUselessResponse(1004)).isEmpty();
+    sendUselessResponses(1001, PeerReputation.USELESS_RESPONSE_THRESHOLD - 1);
 
     // But then the next empty response doesn't come in until after the window expires on the first
     assertThat(
@@ -102,4 +91,16 @@ public class PeerReputationTest {
     }
     assertThat(reputation.getScore()).isEqualTo(MAX_SCORE);
   }
+
+  private void sendRequestTimeouts(final int requestType, final int repeatCount) {
+    for (int i = 0; i < repeatCount; i++) {
+      assertThat(reputation.recordRequestTimeout(requestType)).isEmpty();
+    }
+  }
+  private void sendUselessResponses(final long timestamp, final int repeatCount) {
+    for (int i = 0; i < repeatCount; i++) {
+      assertThat(reputation.recordUselessResponse(timestamp+i)).isEmpty();
+    }
+  }
+
 }
