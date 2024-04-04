@@ -363,7 +363,7 @@ public class EthPeers {
 
   public boolean shouldConnect(final Peer peer, final boolean inbound) {
     final Bytes id = peer.getId();
-    if (peerCount() >= peerUpperBound && !canExceedPeerLimits(id)) {
+    if (peerCount() >= peerUpperBound + 1 && !canExceedPeerLimits(id)) {
       return false;
     }
     final EthPeer ethPeer = completeConnections.get(id);
