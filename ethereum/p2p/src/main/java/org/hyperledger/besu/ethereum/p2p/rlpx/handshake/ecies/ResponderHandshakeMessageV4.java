@@ -70,9 +70,11 @@ public class ResponderHandshakeMessageV4 implements ResponderHandshakeMessage {
 
   @Override
   public String toString() {
-    return "ResponderHandshakeMessageV4{" +
-            "ephPublicKey=" + ephPublicKey +
-            ", nonce=" + nonce +
-            '}';
+    return "ResponderHandshakeMessageV4{"
+        + "ephPublicKey="
+        + ephPublicKey
+        + ", nonce="
+        + nonce
+        + '}';
   }
 }
