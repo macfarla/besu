@@ -104,7 +104,7 @@ import org.slf4j.LoggerFactory;
 public class PeerDiscoveryController {
   private static final Logger LOG = LoggerFactory.getLogger(PeerDiscoveryController.class);
   private static final long REFRESH_CHECK_INTERVAL_MILLIS = MILLISECONDS.convert(30, SECONDS);
-  private static final int PEER_REFRESH_ROUND_TIMEOUT_IN_SECONDS = 5;
+  private static final int PEER_REFRESH_ROUND_TIMEOUT_IN_SECONDS = 15;
   protected final TimerUtil timerUtil;
   private final PeerTable peerTable;
   private final Cache<Bytes, DiscoveryPeer> bondingPeers =
