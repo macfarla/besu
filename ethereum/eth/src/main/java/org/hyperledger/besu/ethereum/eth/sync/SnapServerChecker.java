@@ -140,6 +140,8 @@ public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListen
       final EthPeer peer, final BlockHeader peersHeadBlockHeader) {
     if (peer.getAgreedCapabilities().contains(SnapProtocol.SNAP1)) {
       Boolean isServer;
+      // we don't know yet if they are serving snap but for the check we have to pass true otherwise exceptions will be thrown
+      peer.setIsServingSnap(true);
       try {
         isServer = check(peer, peersHeadBlockHeader).get(10L, TimeUnit.SECONDS);
       } catch (Exception e) {
