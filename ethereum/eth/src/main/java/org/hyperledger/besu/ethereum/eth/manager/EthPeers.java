@@ -404,7 +404,7 @@ public class EthPeers {
     final Bytes id = peer.getId();
     if (alreadyConnectedOrConnecting(inbound, id)) {
       LOG.atTrace()
-          .setMessage("not connecting to peer {} - too many peers")
+          .setMessage("not connecting to peer {} - already connected")
           .addArgument(peer.getLoggableId())
           .log();
       return false;
