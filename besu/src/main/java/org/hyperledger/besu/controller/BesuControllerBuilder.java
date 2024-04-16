@@ -1150,6 +1150,7 @@ public abstract class BesuControllerBuilder implements MiningParameterOverrides 
               checkpointConfigOptions.getNumber().orElseThrow(),
               checkpointConfigOptions.getHash().map(Hash::fromHexString).orElseThrow()));
     }
+    // TODO setup snap validator
     return validators;
   }
 

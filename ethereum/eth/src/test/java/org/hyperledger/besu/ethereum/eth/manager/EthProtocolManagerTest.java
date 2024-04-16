@@ -1125,6 +1125,7 @@ public final class EthProtocolManagerTest {
       final PeerConnection peer = setupPeer(ethManager, (cap, msg, connection) -> {});
       ethManager.processMessage(EthProtocol.ETH63, new DefaultMessage(peer, transactionMessage));
 
+      // TODO this test is broken since I have added a schedule task
       // Verify the regular message executor and scheduled executor got nothing to execute.
       verifyNoInteractions(worker, scheduled);
       // Verify our transactions executor got something to execute.

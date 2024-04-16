@@ -101,7 +101,7 @@ public class SyncTargetManager extends AbstractSyncTargetManager {
             pivotBlockHeader.getNumber(),
             ethPeers.peerCount(),
             ethPeers.getMaxPeers());
-        ethPeers.disconnectWorstUselessPeer();
+        ethPeers.disconnectWorstUselessPeerIfAtCapacity();
         return completedFuture(Optional.empty());
       } else {
         return confirmPivotBlockHeader(bestPeer);

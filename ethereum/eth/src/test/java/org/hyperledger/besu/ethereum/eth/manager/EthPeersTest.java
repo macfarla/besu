@@ -27,12 +27,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.datatypes.Hash;
-import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.eth.manager.exceptions.NoAvailablePeersException;
 import org.hyperledger.besu.ethereum.eth.manager.exceptions.PeerDisconnectedException;
 import org.hyperledger.besu.ethereum.eth.messages.NodeDataMessage;
-import org.hyperledger.besu.ethereum.eth.sync.ChainHeadTracker;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection.PeerNotConnected;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason;
 
@@ -40,7 +38,6 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -60,11 +57,6 @@ public class EthPeersTest {
     when(peerRequest.sendRequest(any())).thenReturn(responseStream);
     ethProtocolManager = EthProtocolManagerTestUtil.create();
     ethPeers = ethProtocolManager.ethContext().getEthPeers();
-    final ChainHeadTracker mock = mock(ChainHeadTracker.class);
-    final BlockHeader blockHeader = mock(BlockHeader.class);
-    when(mock.getBestHeaderFromPeer(any()))
-        .thenReturn(CompletableFuture.completedFuture(blockHeader));
-    ethPeers.setChainHeadTracker(mock);
   }
 
   @Test
@@ -84,6 +76,10 @@ public class EthPeersTest {
     assertThat(EthPeers.HEAVIEST_CHAIN.compare(peerB, peerA)).isGreaterThan(0);
     assertThat(EthPeers.HEAVIEST_CHAIN.compare(peerA, peerA)).isEqualTo(0);
     assertThat(EthPeers.HEAVIEST_CHAIN.compare(peerB, peerB)).isEqualTo(0);
+
+    assertThat(EthPeers.MOST_USEFUL_PEER.compare(peerA, peerA)).isEqualTo(0);
+    assertThat(EthPeers.MOST_USEFUL_PEER.compare(peerB, peerB)).isEqualTo(0);
+    assertThat(EthPeers.MOST_USEFUL_PEER.compare(peerB, peerA)).isLessThan(0);
 
     assertThat(ethProtocolManager.ethContext().getEthPeers().bestPeer()).contains(peerB);
     assertThat(ethProtocolManager.ethContext().getEthPeers().bestPeerWithHeightEstimate())

@@ -16,34 +16,93 @@ package org.hyperledger.besu.ethereum.eth.sync;
 
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
+import org.hyperledger.besu.ethereum.eth.SnapProtocol;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
+import org.hyperledger.besu.ethereum.eth.manager.EthPeers;
 import org.hyperledger.besu.ethereum.eth.manager.snap.GetAccountRangeFromPeerTask;
 import org.hyperledger.besu.ethereum.eth.manager.task.AbstractPeerTask;
 import org.hyperledger.besu.ethereum.eth.messages.snap.AccountRangeMessage;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage;
+import org.hyperledger.besu.plugin.services.BesuEvents;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SnapServerChecker {
+public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListener {
 
   private static final Logger LOG = LoggerFactory.getLogger(SnapServerChecker.class);
-
+  private final SyncMode syncMode;
   private final EthContext ethContext;
-  private final MetricsSystem metricsSystem;
 
-  public SnapServerChecker(final EthContext ethContext, final MetricsSystem metricsSystem) {
+  private final ChainHeadTracker tracker;
+  private final MetricsSystem metricsSystem;
+  private long subscriptionId;
+
+  public SnapServerChecker(
+      final SynchronizerConfiguration syncConfig,
+      final EthContext ethContext,
+      final ChainHeadTracker tracker,
+      final MetricsSystem metricsSystem) {
     this.ethContext = ethContext;
+    this.tracker = tracker;
     this.metricsSystem = metricsSystem;
+    this.syncMode = syncConfig.getSyncMode();
+    if (syncMode == SyncMode.X_CHECKPOINT
+        || syncMode == SyncMode.X_SNAP
+        || syncMode == SyncMode.CHECKPOINT
+        || syncMode == SyncMode.X_SNAP) {
+      LOG.info("subscribing to connect events with snap server check");
+      subscriptionId = ethContext.getEthPeers().subscribeConnect(this::checkIfPeerIsServingSnap);
+    }
   }
 
-  public static void createSnapServerChecker(
-      final EthContext ethContext, final MetricsSystem metricsSystem) {
-    final SnapServerChecker checker = new SnapServerChecker(ethContext, metricsSystem);
-    ethContext.getEthPeers().setSnapServerChecker(checker);
+  public void checkIfPeerIsServingSnap(final EthPeer peer) {
+
+    assert tracker != null : "ChainHeadTracker must be set before EthPeers can be used";
+    CompletableFuture<BlockHeader> future = tracker.getBestHeaderFromPeer(peer);
+
+    future.whenComplete(
+        (peerHeadBlockHeader, error) -> {
+          if (peerHeadBlockHeader == null) {
+            LOG.debug(
+                "Failed to retrieve chain head info. Disconnecting {}... {}",
+                peer.getLoggableId(),
+                error);
+            peer.disconnect(
+                DisconnectMessage.DisconnectReason.USELESS_PEER_FAILED_TO_RETRIEVE_CHAIN_STATE);
+          } else {
+            peer.chainState().updateHeightEstimate(peerHeadBlockHeader.getNumber());
+            CompletableFuture<Void> isServingSnapFuture;
+            // TODO can we assume the sync mode at this point
+            if (syncMode == SyncMode.X_CHECKPOINT
+                || syncMode == SyncMode.X_SNAP
+                || syncMode == SyncMode.CHECKPOINT
+                || syncMode == SyncMode.SNAP) {
+              isServingSnapFuture =
+                  CompletableFuture.runAsync(
+                      () -> {
+                        try {
+                          checkIsSnapServerAndSetPeerProperty(peer, peerHeadBlockHeader);
+                        } catch (Exception e) {
+                          throw new RuntimeException(e);
+                        }
+                      });
+            } else {
+              isServingSnapFuture = CompletableFuture.completedFuture(null);
+            }
+            isServingSnapFuture.thenRun(
+                // TODO: might be a good idea not to connect to syncing peers if we are syncing
+                // ourselves (initial sync)
+                () -> {
+                  // TODO don't think we need to do anything with this future
+                });
+          }
+        });
   }
 
   public CompletableFuture<Boolean> check(final EthPeer peer, final BlockHeader header) {
@@ -77,11 +136,57 @@ public class SnapServerChecker {
     return future;
   }
 
+  public void checkIsSnapServerAndSetPeerProperty(
+      final EthPeer peer, final BlockHeader peersHeadBlockHeader) {
+    if (peer.getAgreedCapabilities().contains(SnapProtocol.SNAP1)) {
+      Boolean isServer;
+      try {
+        isServer = check(peer, peersHeadBlockHeader).get(10L, TimeUnit.SECONDS);
+      } catch (Exception e) {
+        // TODO: change LOG to debug?
+        LOG.info("XXXXXX Error checking if peer is a snap server.", e);
+        peer.setIsServingSnap(false);
+        return;
+      }
+      peer.setIsServingSnap(isServer);
+      LOG.info("Peer {} snap server? {}", peer.getLoggableId(), isServer);
+
+      // TODO: remove the following code. Just here for testing
+      final boolean simpleCheck = peer.getConnection().getPeerInfo().getClientId().contains("Geth");
+      if (simpleCheck && !isServer) {
+        LOG.info(
+            "YYYYYYYYYY Found a peer {} that is Geth but not a snap server: {}",
+            peer.getConnection().getPeerInfo().getClientId(),
+            peer.getLoggableId());
+      } else if (!simpleCheck && isServer) {
+        LOG.info(
+            "ZZZZZZZZZZ Found a peer {} that is NOT Geth but is a snap server: {}",
+            peer.getConnection().getPeerInfo().getClientId(),
+            peer.getLoggableId());
+      }
+    }
+  }
+
   public CompletableFuture<AbstractPeerTask.PeerTaskResult<AccountRangeMessage.AccountRangeData>>
       getAccountRangeFromPeer(final EthPeer peer, final BlockHeader header) {
     return GetAccountRangeFromPeerTask.forAccountRange(
             ethContext, Hash.ZERO, Hash.ZERO, header, metricsSystem)
         .assignPeer(peer)
         .run();
+  }
+
+  @Override
+  public void onInitialSyncCompleted() {
+    // set comparator back to one that disregards snap
+    ethContext.getEthPeers().setBestChainComparator(EthPeers.MOST_USEFUL_PEER);
+    // stop checking whether peers serve snap data
+    ethContext.getEthPeers().unsubscribeConnect(subscriptionId);
+  }
+
+  @Override
+  public void onInitialSyncRestart() {
+    ethContext.getEthPeers().setBestChainComparator(EthPeers.MOST_USEFUL_PEER_SERVING_SNAP);
+    // TODO make sure not already subscribed
+    subscriptionId = ethContext.getEthPeers().subscribeConnect(this::checkIfPeerIsServingSnap);
   }
 }

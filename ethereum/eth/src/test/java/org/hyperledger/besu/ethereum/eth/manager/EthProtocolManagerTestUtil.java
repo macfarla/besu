@@ -97,9 +97,6 @@ public class EthProtocolManagerTestUtil {
             SyncMode.X_SNAP,
             new ForkIdManager(blockchain, Collections.emptyList(), Collections.emptyList(), false));
 
-    final ChainHeadTracker chainHeadTrackerMock = getChainHeadTrackerMock();
-    peers.setChainHeadTracker(chainHeadTrackerMock);
-
     final EthMessages messages = new EthMessages();
     final EthScheduler ethScheduler = new DeterministicEthScheduler(TimeoutPolicy.NEVER_TIMEOUT);
     final EthContext ethContext = new EthContext(peers, messages, ethScheduler);
@@ -151,8 +148,6 @@ public class EthProtocolManagerTestUtil {
       final EthMessages ethMessages,
       final EthContext ethContext,
       final ForkIdManager forkIdManager) {
-
-    ethPeers.setChainHeadTracker(getChainHeadTrackerMock());
 
     final BigInteger networkId = BigInteger.ONE;
     return new EthProtocolManager(
@@ -224,10 +219,6 @@ public class EthProtocolManagerTestUtil {
             SyncMode.X_SNAP,
             new ForkIdManager(blockchain, Collections.emptyList(), Collections.emptyList(), false));
     final EthMessages messages = new EthMessages();
-
-    final ChainHeadTracker chtMock = getChainHeadTrackerMock();
-
-    peers.setChainHeadTracker(chtMock);
 
     return create(
         blockchain,
@@ -306,9 +297,6 @@ public class EthProtocolManagerTestUtil {
             false,
             SyncMode.X_SNAP,
             new ForkIdManager(blockchain, Collections.emptyList(), Collections.emptyList(), false));
-
-    final ChainHeadTracker chainHeadTrackerMock = getChainHeadTrackerMock();
-    peers.setChainHeadTracker(chainHeadTrackerMock);
 
     final EthMessages messages = new EthMessages();
 

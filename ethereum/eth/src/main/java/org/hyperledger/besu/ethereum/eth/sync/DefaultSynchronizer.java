@@ -92,13 +92,12 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     this.terminationCondition = terminationCondition;
 
     ChainHeadTracker.trackChainHeadForPeers(
+        syncConfig,
         ethContext,
         protocolSchedule,
         protocolContext.getBlockchain(),
         this::calculateTrailingPeerRequirements,
         metricsSystem);
-
-    SnapServerChecker.createSnapServerChecker(ethContext, metricsSystem);
 
     this.blockPropagationManager =
         terminationCondition.shouldStopDownload()

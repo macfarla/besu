@@ -133,6 +133,8 @@ public final class DisconnectMessage extends AbstractMessageData {
         (byte) 0x03, "Failed to retrieve header for chain state"),
     USELESS_PEER_BY_REPUTATION((byte) 0x03, "Lowest reputation score"),
     USELESS_PEER_BY_CHAIN_COMPARATOR((byte) 0x03, "Lowest by chain height comparator"),
+    USELESS_PEER_BY_CHAIN_COMPARATOR_INBOUND_INITIATED(
+        (byte) 0x03, "Lowest (inbound) by chain height comparator"),
     TOO_MANY_PEERS((byte) 0x04),
     ALREADY_CONNECTED((byte) 0x05),
     INCOMPATIBLE_P2P_PROTOCOL_VERSION((byte) 0x06),

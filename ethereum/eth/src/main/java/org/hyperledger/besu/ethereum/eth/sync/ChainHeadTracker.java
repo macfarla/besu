@@ -53,6 +53,7 @@ public class ChainHeadTracker {
   }
 
   public static void trackChainHeadForPeers(
+      final SynchronizerConfiguration syncConfig,
       final EthContext ethContext,
       final ProtocolSchedule protocolSchedule,
       final Blockchain blockchain,
@@ -62,7 +63,8 @@ public class ChainHeadTracker {
         new TrailingPeerLimiter(ethContext.getEthPeers(), trailingPeerRequirementsCalculator);
     final ChainHeadTracker tracker =
         new ChainHeadTracker(ethContext, protocolSchedule, trailingPeerLimiter, metricsSystem);
-    ethContext.getEthPeers().setChainHeadTracker(tracker);
+
+    new SnapServerChecker(syncConfig, ethContext, tracker, metricsSystem);
     blockchain.observeBlockAdded(trailingPeerLimiter);
   }
 
