@@ -64,7 +64,10 @@ public class ChainHeadTracker {
     final ChainHeadTracker tracker =
         new ChainHeadTracker(ethContext, protocolSchedule, trailingPeerLimiter, metricsSystem);
 
-    new SnapServerChecker(syncConfig, ethContext, tracker, metricsSystem);
+    if (SyncMode.isCheckpointSync(syncConfig.getSyncMode())
+        || SyncMode.isSnapSync(syncConfig.getSyncMode())) {
+      new SnapServerChecker(syncConfig, ethContext, tracker, metricsSystem);
+    }
     blockchain.observeBlockAdded(trailingPeerLimiter);
   }
 
