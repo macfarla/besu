@@ -127,11 +127,16 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
         ethMessages,
         ethereumWireProtocolConfiguration);
 
+    scheduleEthPeersEvictionCheck(ethPeers);
+  }
+
+  private void scheduleEthPeersEvictionCheck(EthPeers ethPeers) {
     // schedule a periodic check on ethPeers to evict worst peer if at capacity
-    scheduler.scheduleFutureTask(
+    this.scheduler.scheduleFutureTask(
         () -> ethPeers.disconnectWorstUselessPeerIfAtCapacity(), DEFAULT_ETH_PEERS_REFRESH_TIMEOUT);
   }
 
+  // TODO can we simplify this to a single constructor - this one is only called in TestNode
   @VisibleForTesting
   public EthProtocolManager(
       final Blockchain blockchain,
@@ -164,6 +169,9 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
             Collections.emptyList(),
             Collections.emptyList(),
             ethereumWireProtocolConfiguration.isLegacyEth64ForkIdEnabled()));
+
+    // schedule a periodic check on ethPeers to evict worst peer if at capacity
+    scheduleEthPeersEvictionCheck(ethPeers);
   }
 
   public EthContext ethContext() {

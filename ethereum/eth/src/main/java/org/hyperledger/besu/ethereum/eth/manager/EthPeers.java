@@ -140,7 +140,7 @@ public class EthPeers {
     metricsSystem.createIntegerGauge(
         BesuMetricCategory.ETHEREUM,
         "peer_count_snap_server",
-        "The current number of peers connected that serve snap data",
+        "The current number of peers connected that are confirmed to serve snap data",
         () ->
             (int)
                 streamAvailablePeers()
@@ -208,14 +208,10 @@ public class EthPeers {
 
   private boolean registerDisconnect(final EthPeer peer, final PeerConnection connection) {
     incompleteConnections.invalidate(connection);
-    boolean removed = false;
     if (peer == null) {
-      LOG.atTrace()
-          .setMessage("attempt to remove null peer with connection {}")
-          .addArgument(connection)
-          .log();
       return false;
     }
+    boolean removed = false;
     if (peer.getConnection().equals(connection)) {
       final Bytes id = peer.getId();
       if (!peerHasIncompleteConnection(id)) {
@@ -437,19 +433,27 @@ public class EthPeers {
           .filter(p -> !canExceedPeerLimits(p.getId()))
           .min(getBestChainComparator())
           .ifPresent(
-              peer -> {
-                if (getBestChainComparator().compare(peer, connectingPeer) < 0) {
+              worstCurrentlyConnectedPeer -> {
+                if (getBestChainComparator().compare(worstCurrentlyConnectedPeer, connectingPeer)
+                    < 0) {
 
                   LOG.atDebug()
                       .setMessage(
-                          "disconnecting peer {}. Waiting for better peers. Current {} of max {}")
-                      .addArgument(peer::getLoggableId)
+                          "disconnecting current peer {}. Waiting for better peers. Current {} of max {}")
+                      .addArgument(worstCurrentlyConnectedPeer::getLoggableId)
                       .addArgument(this::peerCount)
                       .addArgument(this::getMaxPeers)
                       .log();
-                  peer.disconnect(
+                  worstCurrentlyConnectedPeer.disconnect(
                       DisconnectMessage.DisconnectReason.USELESS_PEER_BY_CHAIN_COMPARATOR);
                 } else {
+                  LOG.atDebug()
+                      .setMessage(
+                          "disconnecting connecting peer {}. Waiting for better peers. Current {} of max {}")
+                      .addArgument(connectingPeer::getLoggableId)
+                      .addArgument(this::peerCount)
+                      .addArgument(this::getMaxPeers)
+                      .log();
                   connectingPeer.disconnect(DisconnectMessage.DisconnectReason.TOO_MANY_PEERS);
                 }
               });

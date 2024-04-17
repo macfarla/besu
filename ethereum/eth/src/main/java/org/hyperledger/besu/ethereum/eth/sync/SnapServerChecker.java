@@ -58,7 +58,10 @@ public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListen
         || syncMode == SyncMode.CHECKPOINT
         || syncMode == SyncMode.X_SNAP) {
       LOG.info("subscribing to peer connect events with snap server check");
-      subscriptionId = ethContext.getEthPeers().subscribeConnect(this::checkBestHeaderAndSetWhetherPeerIsServingSnap);
+      subscriptionId =
+          ethContext
+              .getEthPeers()
+              .subscribeConnect(this::checkBestHeaderAndSetWhetherPeerIsServingSnap);
     }
   }
 
@@ -68,26 +71,26 @@ public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListen
     CompletableFuture<BlockHeader> future = tracker.getBestHeaderFromPeer(peer);
 
     future.whenComplete(
-            (peerHeadBlockHeader, error) -> {
-              if (peerHeadBlockHeader == null) {
-                LOG.debug(
-                        "Failed to retrieve chain head info. Disconnecting {}... {}",
-                        peer.getLoggableId(),
-                        error);
-                peer.disconnect(
-                        DisconnectMessage.DisconnectReason.USELESS_PEER_FAILED_TO_RETRIEVE_CHAIN_STATE);
-              } else {
-                peer.chainState().updateHeightEstimate(peerHeadBlockHeader.getNumber());
-                try {
-                  sendSnapRequestToDetermineIfPeerIsServingSnap(peer, peerHeadBlockHeader);
-                } catch (Exception e) {
-                  LOG.debug(
-                          "Failed to retrieve chain head info. Disconnecting {}... {}",
-                          peer.getLoggableId(),
-                          e);
-                }
-              }
-            });
+        (peerHeadBlockHeader, error) -> {
+          if (peerHeadBlockHeader == null) {
+            LOG.debug(
+                "Failed to retrieve chain head info. Disconnecting {}... {}",
+                peer.getLoggableId(),
+                error);
+            peer.disconnect(
+                DisconnectMessage.DisconnectReason.USELESS_PEER_FAILED_TO_RETRIEVE_CHAIN_STATE);
+          } else {
+            peer.chainState().updateHeightEstimate(peerHeadBlockHeader.getNumber());
+            try {
+              sendSnapRequestToDetermineIfPeerIsServingSnap(peer, peerHeadBlockHeader);
+            } catch (Exception e) {
+              LOG.debug(
+                  "Failed to retrieve chain head info. Disconnecting {}... {}",
+                  peer.getLoggableId(),
+                  e);
+            }
+          }
+        });
   }
 
   private void sendSnapRequestToDetermineIfPeerIsServingSnap(
@@ -126,32 +129,32 @@ public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListen
 
   private CompletableFuture<Boolean> checkSnapResult(final EthPeer peer, final BlockHeader header) {
     LOG.atDebug()
-            .setMessage("Checking whether peer {} is a snap server ...")
-            .addArgument(peer::getLoggableId)
-            .log();
+        .setMessage("Checking whether peer {} is a snap server ...")
+        .addArgument(peer::getLoggableId)
+        .log();
     final CompletableFuture<AbstractPeerTask.PeerTaskResult<AccountRangeMessage.AccountRangeData>>
-            snapServerCheckCompletableFuture = getAccountRangeFromPeer(peer, header);
+        snapServerCheckCompletableFuture = getAccountRangeFromPeer(peer, header);
     final CompletableFuture<Boolean> future = new CompletableFuture<>();
     snapServerCheckCompletableFuture.whenComplete(
-            (peerResult, error) -> {
-              if (peerResult != null) {
-                if (!peerResult.getResult().accounts().isEmpty()
-                        || !peerResult.getResult().proofs().isEmpty()) {
-                  LOG.atInfo()
-                          .setMessage("Peer {} is a snap server! getAccountRangeResult: {}")
-                          .addArgument(peer::getLoggableId)
-                          .addArgument(peerResult.getResult())
-                          .log();
-                  future.complete(true);
-                } else {
-                  LOG.atDebug()
-                          .setMessage("Peer {} is not a snap server ...")
-                          .addArgument(peer::getLoggableId)
-                          .log();
-                  future.complete(false);
-                }
-              }
-            });
+        (peerResult, error) -> {
+          if (peerResult != null) {
+            if (!peerResult.getResult().accounts().isEmpty()
+                || !peerResult.getResult().proofs().isEmpty()) {
+              LOG.atInfo()
+                  .setMessage("Peer {} is a snap server! getAccountRangeResult: {}")
+                  .addArgument(peer::getLoggableId)
+                  .addArgument(peerResult.getResult())
+                  .log();
+              future.complete(true);
+            } else {
+              LOG.atDebug()
+                  .setMessage("Peer {} is not a snap server ...")
+                  .addArgument(peer::getLoggableId)
+                  .log();
+              future.complete(false);
+            }
+          }
+        });
     return future;
   }
 
@@ -175,6 +178,9 @@ public class SnapServerChecker implements BesuEvents.InitialSyncCompletionListen
   public void onInitialSyncRestart() {
     ethContext.getEthPeers().setBestChainComparator(EthPeers.MOST_USEFUL_PEER_SERVING_SNAP);
     // TODO make sure not already subscribed
-    subscriptionId = ethContext.getEthPeers().subscribeConnect(this::checkBestHeaderAndSetWhetherPeerIsServingSnap);
+    subscriptionId =
+        ethContext
+            .getEthPeers()
+            .subscribeConnect(this::checkBestHeaderAndSetWhetherPeerIsServingSnap);
   }
 }
