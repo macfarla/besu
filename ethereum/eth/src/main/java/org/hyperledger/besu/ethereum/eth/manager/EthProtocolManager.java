@@ -374,7 +374,7 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
       final DisconnectReason reason,
       final boolean initiatedByPeer) {
     final boolean wasActiveConnection = ethPeers.registerDisconnect(connection);
-    // TODO is this useful at INFO level
+    // TODO currently this is useful at INFO level but need to change back to DEBUG
     LOG.atInfo()
         .setMessage("Disconnect - active Connection? {} - {} - {} {} - {} {} - {} peers left")
         .addArgument(wasActiveConnection)
