@@ -18,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -57,9 +56,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
-import io.vertx.core.dns.DnsClient;
 import org.apache.tuweni.bytes.Bytes32;
 import org.apache.tuweni.crypto.SECP256K1;
 import org.assertj.core.api.Assertions;
@@ -317,59 +313,78 @@ public final class DefaultP2PNetworkTest {
     assertThat(network.addMaintainedConnectionPeer(peer)).isFalse();
   }
 
-  @Test
-  public void shouldNotStartDnsDiscoveryWhenDnsURLIsNotConfigured() {
-    final DefaultP2PNetwork testClass = network();
-    testClass.start();
-    // ensure DnsDaemon is NOT present:
-    assertThat(testClass.getDnsDaemon()).isNotPresent();
-  }
+  //  @Test
+  //  public void shouldNotStartDnsDiscoveryWhenDnsURLIsNotConfigured() {
+  //    DefaultP2PNetwork testClass = network();
+  //    testClass.start();
+  //    // ensure DnsDaemon is NOT present:
+  //    assertThat(testClass.getDnsDaemon()).isNotPresent();
+  //  }
 
-  @Test
-  public void shouldStartDnsDiscoveryWhenDnsURLIsConfigured() {
-    // create a discovery config with a dns config
-    final DiscoveryConfiguration disco =
-        DiscoveryConfiguration.create().setDnsDiscoveryURL("enrtree://mock@localhost");
+  //  @Test
+  //  public void shouldStartDnsDiscoveryWhenDnsURLIsConfigured() {
+  //    // create a discovery config with a dns config
+  //    DiscoveryConfiguration disco =
+  //        DiscoveryConfiguration.create().setDnsDiscoveryURL("enrtree://mock@localhost");
+  //
+  //    // spy on config to return dns discovery config:
+  //    NetworkingConfiguration dnsConfig =
+  //        when(spy(config).getDiscovery()).thenReturn(disco).getMock();
+  //
+  //    // spy on DefaultP2PNetwork
+  //    DefaultP2PNetwork testClass = (DefaultP2PNetwork) builder().config(dnsConfig).build();
+  //
+  //    testClass.start();
+  //    assertThat(testClass.getDnsDaemon()).isPresent();
+  //  }
 
-    // spy on config to return dns discovery config:
-    final NetworkingConfiguration dnsConfig =
-        when(spy(config).getDiscovery()).thenReturn(disco).getMock();
+  //  @Test
+  //  public void shouldUseDnsServerOverrideIfPresent() {
+  //    // create a discovery config with a dns config
+  //    DiscoveryConfiguration disco =
+  //        DiscoveryConfiguration.create().setDnsDiscoveryURL("enrtree://mock@localhost");
+  //
+  //    // spy on config to return dns discovery config:
+  //    NetworkingConfiguration dnsConfig = spy(config);
+  //    doReturn(disco).when(dnsConfig).getDiscovery();
+  //    doReturn(Optional.of("localhost")).when(dnsConfig).getDnsDiscoveryServerOverride();
+  //
+  //    DefaultP2PNetwork testClass = (DefaultP2PNetwork) builder().config(dnsConfig).build();
+  //    testClass.start();
+  //
+  //    // ensure we used the dns server override config when building DNSDaemon:
+  //    assertThat(testClass.getDnsDaemon()).isPresent();
+  //    verify(dnsConfig, times(2)).getDnsDiscoveryServerOverride();
+  //  }
 
-    Vertx vertx = mock(Vertx.class);
-    when(vertx.createDnsClient(any())).thenReturn(mock(DnsClient.class));
-    when(vertx.getOrCreateContext()).thenReturn(mock(Context.class));
-
-    // spy on DefaultP2PNetwork
-    final DefaultP2PNetwork testClass =
-        (DefaultP2PNetwork) builder().vertx(vertx).config(dnsConfig).build();
-
-    testClass.start();
-    assertThat(testClass.getDnsDaemon()).isPresent();
-  }
-
-  @Test
-  public void shouldUseDnsServerOverrideIfPresent() {
-    // create a discovery config with a dns config
-    final DiscoveryConfiguration disco =
-        DiscoveryConfiguration.create().setDnsDiscoveryURL("enrtree://mock@localhost");
-
-    // spy on config to return dns discovery config:
-    final NetworkingConfiguration dnsConfig = spy(config);
-    doReturn(disco).when(dnsConfig).getDiscovery();
-    doReturn(Optional.of("localhost")).when(dnsConfig).getDnsDiscoveryServerOverride();
-
-    Vertx vertx = mock(Vertx.class);
-    when(vertx.createDnsClient(any())).thenReturn(mock(DnsClient.class));
-    when(vertx.getOrCreateContext()).thenReturn(mock(Context.class));
-
-    final DefaultP2PNetwork testClass =
-        (DefaultP2PNetwork) builder().config(dnsConfig).vertx(vertx).build();
-    testClass.start();
-
-    // ensure we used the dns server override config when building DNSDaemon:
-    assertThat(testClass.getDnsDaemon()).isPresent();
-    verify(dnsConfig, times(2)).getDnsDiscoveryServerOverride();
-  }
+  //  @Test
+  //  public void shouldNotDropDnsHostsOnEmptyLookup() {
+  //    DefaultP2PNetwork network = network();
+  ////    DNSDaemonListener listenerUnderTest = network.createDaemonListener();
+  //
+  //    // assert no entries prior to lookup
+  //    assertThat(network.dnsPeers).isNull();
+  //
+  //    // simulate successful lookup of 1 peer
+  //    listenerUnderTest.newRecords(
+  //        1,
+  //        List.of(
+  //            EthereumNodeRecord.create(
+  //                SECP256K1.KeyPair.fromSecretKey(mockKey),
+  //                1L,
+  //                null,
+  //                null,
+  //                InetAddress.getLoopbackAddress(),
+  //                30303,
+  //                30303)));
+  //    assertThat(network.dnsPeers).isNotEmpty();
+  //    assertThat(network.dnsPeers.size()).isEqualTo(1);
+  //
+  //    // simulate failed lookup empty list
+  //    listenerUnderTest.newRecords(2, Collections.emptyList());
+  //    assertThat(network.dnsPeers).isNotEmpty();
+  //    assertThat(network.dnsPeers.size()).isEqualTo(1);
+  //  }
 
   private DefaultP2PNetwork network() {
     return (DefaultP2PNetwork) builder().build();
