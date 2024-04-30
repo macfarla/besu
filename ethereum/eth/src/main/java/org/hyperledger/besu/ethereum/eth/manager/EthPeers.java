@@ -614,8 +614,7 @@ public class EthPeers {
                     .addArgument(this::peerCount)
                     .addArgument(this::getMaxPeers)
                     .log();
-                peer.disconnect(
-                    DisconnectMessage.DisconnectReason.USELESS_PEER_BY_CHAIN_COMPARATOR);
+                peer.disconnect(DisconnectMessage.DisconnectReason.USELESS_PEER);
               });
     }
   }
