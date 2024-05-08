@@ -119,8 +119,8 @@ public class EthDNSIterator implements Iterator<NodeRecord> {
   public static void main(final String[] __) throws NamingException {
     final EthDNSIterator iter =
         new EthDNSIterator(
-            // TODO hardcoded to holesky for testing
-            "enrtree://AKA3AM6LPBYEUDMVNU3BSVQJ5AD45Y7YPOHJLEF6W26QOE4VTUDPE@all.holesky.ethdisco.net");
+            // TODO hardcoded to mainnet for testing
+            "enrtree://AKA3AM6LPBYEUDMVNU3BSVQJ5AD45Y7YPOHJLEF6W26QOE4VTUDPE@all.mainnet.ethdisco.net");
 
     int count = 0;
     final Instant start = Instant.now();
