@@ -3,6 +3,7 @@ on:
   release:
     types:
       - prereleased
+      - published
 env:
   registry: docker.io
 
