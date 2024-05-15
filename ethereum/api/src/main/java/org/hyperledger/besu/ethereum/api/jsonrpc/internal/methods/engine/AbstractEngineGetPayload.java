@@ -22,6 +22,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.ExecutionEngineJsonRpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.BlockResultFactory;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
@@ -118,4 +119,9 @@ public abstract class AbstractEngineGetPayload extends ExecutionEngineJsonRpcMet
       final JsonRpcRequestContext request,
       final PayloadIdentifier payloadId,
       final BlockWithReceipts blockWithReceipts);
+
+  public JsonRpcResponse engine_getClientVersionV1(final JsonRpcRequestContext request) {
+    final String clientVersion = "besu/" + System.getProperty("besu.version");
+    return new JsonRpcSuccessResponse(request.getRequest().getId(), clientVersion);
+  }
 }

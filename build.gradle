@@ -278,6 +278,11 @@ allprojects {
     }
 
     options.encoding = 'UTF-8'
+    options.fork = true
+    options.incremental = true
+    options.forkOptions.jvmArgs += [
+      "-Dbesu.version=" + version.toString()
+    ]
   }
 
   // IntelliJ workaround to allow repeated debugging of unchanged code
@@ -1004,6 +1009,7 @@ dependencies {
   errorprone 'org.hyperledger.besu:besu-errorprone-checks'
   implementation project(':besu')
   implementation project(':ethereum:evmtool')
+  implementation project(':ethereum:core') // Added to resolve import errors in api module
 }
 
 @CompileStatic
