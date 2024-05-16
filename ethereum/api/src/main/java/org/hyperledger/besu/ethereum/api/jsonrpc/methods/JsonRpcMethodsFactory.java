@@ -110,6 +110,7 @@ public class JsonRpcMethodsFactory {
               new EeaJsonRpcMethods(
                   blockchainQueries, protocolSchedule, transactionPool, privacyParameters),
               new ExecutionEngineJsonRpcMethods(
+                  clientVersion,
                   miningCoordinator,
                   protocolSchedule,
                   protocolContext,
