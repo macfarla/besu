@@ -121,7 +121,7 @@ public abstract class AbstractEngineGetPayload extends ExecutionEngineJsonRpcMet
       final BlockWithReceipts blockWithReceipts);
 
   public JsonRpcResponse engine_getClientVersionV1(final JsonRpcRequestContext request) {
-    final String clientVersion = "besu/" + System.getProperty("besu.version");
+    final String clientVersion = System.getProperty("besu.version");
     return new JsonRpcSuccessResponse(request.getRequest().getId(), clientVersion);
   }
 }

@@ -6,8 +6,8 @@
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -1052,3 +1052,18 @@ artifactoryPublish.dependsOn verifyDistributions
 artifactoryPublish.mustRunAfter(distTar)
 artifactoryPublish.mustRunAfter(distZip)
 artifactoryPublish.mustRunAfter(javadocJar)
+
+// Task to capture the first four bytes of the latest commit hash and write it to a properties file
+task injectGitCommitHash {
+    doLast {
+        def commitHash = 'git rev-parse --short=4 HEAD'.execute([], project.rootDir).text.trim()
+        def propertiesFile = new File("$projectDir/src/main/resources/git.properties")
+        if (!propertiesFile.exists()) {
+            propertiesFile.createNewFile()
+        }
+        propertiesFile.text = "git.commit.id.abbrev=$commitHash"
+    }
+}
+
+// Ensure the injectGitCommitHash task is executed before the build starts
+tasks.build.dependsOn injectGitCommitHash
