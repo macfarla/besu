@@ -19,15 +19,6 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({"code", "name", "version", "commit"})
 public class EngineGetClientVersionResultV1 {
-  //
-  //          - `code`: `ClientCode`, e.g. `NB` or `BU`
-  //          - `name`: `string`, Human-readable name of the client, e.g. `Lighthouse` or
-  // `go-ethereum`
-  //          - `version`: `string`, the version string of the current implementation e.g. `v4.6.0`
-  // or `1.0.0-alpha.1` or `1.0.0+20130313144700`
-  //          - `commit`: `DATA`, 4 bytes - first four bytes of the latest commit hash of this build
-  // e.g. `fa4ff922`
-
   private final String code = "BU";
   private final String name = "Besu";
   private final String version;

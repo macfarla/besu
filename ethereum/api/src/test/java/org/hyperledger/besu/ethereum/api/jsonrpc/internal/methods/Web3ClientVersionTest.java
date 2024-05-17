@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 
 public class Web3ClientVersionTest {
 
-  private final String CLIENT_VERSION = "besu/1.0.0";
+  private final String CLIENT_VERSION = "besu/v24.5-develop-7577120/osx-x86_64/openjdk-java-17";
   private final String JSON_RPC_VERSION = "2.0";
   private final String ETH_METHOD = "web3_clientVersion";
 
