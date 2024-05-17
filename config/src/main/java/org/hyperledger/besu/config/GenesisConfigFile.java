@@ -19,7 +19,6 @@ import static org.hyperledger.besu.config.JsonUtil.normalizeKeys;
 import org.hyperledger.besu.datatypes.Wei;
 
 import java.net.URL;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -151,7 +150,8 @@ public class GenesisConfigFile {
    * @return the parent hash
    */
   public String getParentHash() {
-    return JsonUtil.getString(genesisRoot, "parenthash", "");
+    return JsonUtil.getString(genesisRoot, "parenthash")
+      .orElse("0x0000000000000000000000000000000000000000000000000000000000000000");
   }
 
   /**
@@ -160,7 +160,8 @@ public class GenesisConfigFile {
    * @return the difficulty
    */
   public String getDifficulty() {
-    return getRequiredString("difficulty");
+    return JsonUtil.getString(genesisRoot, "difficulty")
+      .orElseThrow(() -> new IllegalArgumentException("Missing required 'difficulty' field in genesis file"));
   }
 
   /**
@@ -169,7 +170,8 @@ public class GenesisConfigFile {
    * @return the extra data
    */
   public String getExtraData() {
-    return JsonUtil.getString(genesisRoot, "extradata", "");
+    return JsonUtil.getString(genesisRoot, "extradata")
+      .orElseThrow(() -> new IllegalArgumentException("Missing required 'extradata' field in genesis file"));
   }
 
   /**
@@ -178,7 +180,13 @@ public class GenesisConfigFile {
    * @return the gas limit
    */
   public long getGasLimit() {
-    return parseLong("gasLimit", getFirstRequiredString("gaslimit", "gastarget"));
+    return Stream.of("gaslimit", "gastarget")
+        .map(key -> JsonUtil.getString(genesisRoot, key))
+        .filter(Optional::isPresent)
+        .map(Optional::get)
+        .mapToLong(Long::decode)
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Missing required 'gaslimit' or 'gastarget' field in genesis file"));
   }
 
   /**
@@ -276,23 +284,7 @@ public class GenesisConfigFile {
     return parseLong("timestamp", JsonUtil.getValueAsString(genesisRoot, "timestamp", "0x0"));
   }
 
-  private String getRequiredString(final String key) {
-    return getFirstRequiredString(key);
-  }
-
-  private String getFirstRequiredString(final String... keys) {
-    List<String> keysList = Arrays.asList(keys);
-    return keysList.stream()
-        .filter(genesisRoot::has)
-        .findFirst()
-        .map(key -> genesisRoot.get(key).asText())
-        .orElseThrow(
-            () ->
-                new IllegalArgumentException(
-                    String.format(
-                        "Invalid genesis block configuration, missing value for one of '%s'",
-                        keysList)));
-  }
+  // Method getFirstRequiredString removed as it's no longer used after implementing stricter JSON parsing.
 
   private long parseLong(final String name, final String value) {
     try {
@@ -306,6 +298,8 @@ public class GenesisConfigFile {
               + "'");
     }
   }
+
+  // Removed getRequiredString method as it's no longer used after implementing stricter JSON parsing.
 
   /**
    * Get Fork Block numbers
