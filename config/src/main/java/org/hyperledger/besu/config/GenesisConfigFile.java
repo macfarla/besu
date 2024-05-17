@@ -139,9 +139,14 @@ public class GenesisConfigFile {
             allocations ->
                 Streams.stream(allocations.fieldNames())
                     .map(
-                        key ->
-                            new GenesisAllocation(
-                                key, JsonUtil.getObjectNode(allocations, key).get())));
+                        key -> {
+                          final ObjectNode accountNode = JsonUtil.getObjectNode(allocations, key).get();
+                          if (!accountNode.has("balance")) {
+                            throw new IllegalArgumentException("Missing required 'balance' field for account " + key + " in alloc section");
+                          }
+                          return new GenesisAllocation(
+                              key, accountNode);
+                        }));
   }
 
   /**
@@ -150,8 +155,7 @@ public class GenesisConfigFile {
    * @return the parent hash
    */
   public String getParentHash() {
-    return JsonUtil.getString(genesisRoot, "parenthash")
-      .orElse("0x0000000000000000000000000000000000000000000000000000000000000000");
+    return JsonUtil.getString(genesisRoot, "parenthash").orElse("");
   }
 
   /**
@@ -161,7 +165,7 @@ public class GenesisConfigFile {
    */
   public String getDifficulty() {
     return JsonUtil.getString(genesisRoot, "difficulty")
-      .orElseThrow(() -> new IllegalArgumentException("Missing required 'difficulty' field in genesis file"));
+      .orElseThrow(() -> new IllegalArgumentException("Invalid genesis block configuration"));
   }
 
   /**
@@ -170,8 +174,7 @@ public class GenesisConfigFile {
    * @return the extra data
    */
   public String getExtraData() {
-    return JsonUtil.getString(genesisRoot, "extradata")
-      .orElseThrow(() -> new IllegalArgumentException("Missing required 'extradata' field in genesis file"));
+    return JsonUtil.getString(genesisRoot, "extradata").orElse("");
   }
 
   /**
@@ -186,7 +189,7 @@ public class GenesisConfigFile {
         .map(Optional::get)
         .mapToLong(Long::decode)
         .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("Missing required 'gaslimit' or 'gastarget' field in genesis file"));
+        .orElseThrow(() -> new IllegalArgumentException("Invalid genesis block configuration"));
   }
 
   /**
