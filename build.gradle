@@ -362,32 +362,20 @@ allprojects {
       showStandardStreams = true
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
-    }
-    // Log test output to a file
-    doFirst {
-      println "Starting the doFirst block for test task"
-      println "Executing doFirst block for test task"
+      // Configure output to a file
+      outputs.upToDateWhen { false }
       def logDir = new File("${buildDir}/test-logs")
-      println "Attempting to create test logs directory: ${logDir.absolutePath}"
       if (!logDir.exists()) {
-        if (logDir.mkdirs()) {
-          println "Test logs directory created successfully: ${logDir.absolutePath}"
-        } else {
-          println "Failed to create test logs directory: ${logDir.absolutePath}"
-        }
-      } else {
-        println "Test logs directory already exists: ${logDir.absolutePath}"
+        logDir.mkdirs()
       }
       def logFile = new File(logDir, "test-output.log")
-      println "Attempting to create test output log file: ${logFile.absolutePath}"
-      try {
-        def outputStream = new FileOutputStream(logFile)
-        println "Test output will be logged to: ${logFile.absolutePath}"
-        System.setOut(new PrintStream(outputStream))
-        System.setErr(new PrintStream(outputStream))
-      } catch (IOException e) {
-        println "Failed to create test output log file: ${logFile.absolutePath}"
-        e.printStackTrace()
+      def outputStream = new FileOutputStream(logFile)
+      def printStream = new PrintStream(outputStream)
+      addTestOutputListener { descriptor, event ->
+        printStream.println("Test: ${descriptor.name} - ${event.resultType}")
+        if (event.exception) {
+          event.exception.printStackTrace(printStream)
+        }
       }
     }
     outputs.upToDateWhen { false }
