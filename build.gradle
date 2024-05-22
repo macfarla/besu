@@ -381,8 +381,8 @@ allprojects {
     testLogging.exceptionFormat = 'full'
     testLogging.events "passed", "skipped", "failed"
     // Set the standard output and error streams to the printStream
-    test.testLogging.standardOutput = printStream
-    test.testLogging.standardError = printStream
+    standardOutput = printStream
+    standardError = printStream
   }
 
   javadoc {
