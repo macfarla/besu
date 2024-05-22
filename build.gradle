@@ -365,6 +365,7 @@ allprojects {
     }
     // Log test output to a file
     doFirst {
+      println "Executing doFirst block for test task"
       def logDir = new File("${buildDir}/test-logs")
       if (!logDir.exists()) {
         if (logDir.mkdirs()) {
@@ -378,11 +379,11 @@ allprojects {
         def outputStream = new FileOutputStream(logFile)
         standardOutput = outputStream
         errorOutput = outputStream
-        println "Test output will be logged to: ${logFile.absolutePath}"
       } catch (IOException e) {
         println "Failed to create test output log file: ${logFile.absolutePath}"
         e.printStackTrace()
       }
+      println "Test output will be logged to: ${logFile.absolutePath}"
     }
     outputs.upToDateWhen { false }
   }
