@@ -116,8 +116,9 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
 
   @Test
   public void subscriptionToMinerNodeMustReceiveEveryPublishEvent() {
-    final Subscription minerSubscription = minerWebSocket.subscribe();
+    System.out.println("Starting test: subscriptionToMinerNodeMustReceiveEveryPublishEvent");
 
+    final Subscription minerSubscription = minerWebSocket.subscribe();
     System.out.println("Subscribed to miner node");
 
     final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 1));
@@ -139,6 +140,8 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
 
     minerWebSocket.unsubscribe(minerSubscription);
     System.out.println("Unsubscribed from miner node");
+
+    System.out.println("Ending test: subscriptionToMinerNodeMustReceiveEveryPublishEvent");
   }
 
   @Test
@@ -164,12 +167,13 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
 
   @Test
   public void everySubscriptionMustReceiveEveryPublishEvent() {
+    System.out.println("Starting test: everySubscriptionMustReceiveEveryPublishEvent");
+
     final Subscription minerSubscriptionOne = minerWebSocket.subscribe();
     final Subscription minerSubscriptionTwo = minerWebSocket.subscribe();
     final Subscription archiveSubscriptionOne = archiveWebSocket.subscribe();
     final Subscription archiveSubscriptionTwo = archiveWebSocket.subscribe();
     final Subscription archiveSubscriptionThree = archiveWebSocket.subscribe();
-
     System.out.println("Subscribed to miner and archive nodes");
 
     final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 10));
@@ -199,5 +203,6 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     archiveWebSocket.unsubscribe(archiveSubscriptionThree);
 
     System.out.println("Unsubscribed from miner and archive nodes");
+    System.out.println("Ending test: everySubscriptionMustReceiveEveryPublishEvent");
   }
 }
