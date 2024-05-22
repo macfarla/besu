@@ -363,7 +363,7 @@ allprojects {
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
     }
-    outputs.upToDateWhen { false }
+    test.outputs.upToDateWhen { false }
     def logDir = new File("${buildDir}/test-logs")
     if (!logDir.exists()) {
       logDir.mkdirs()
@@ -378,7 +378,6 @@ allprojects {
     testLogging.showStandardStreams = true
     testLogging.exceptionFormat = 'full'
     testLogging.events "passed", "skipped", "failed"
-    testLogging.outputs.upToDateWhen { false }
     testLogging.addTestOutputListener { descriptor, event ->
       printStream.println("Test: ${descriptor.name} - ${event.resultType}")
       if (event.exception) {
