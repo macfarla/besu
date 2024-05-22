@@ -362,23 +362,21 @@ allprojects {
       showStandardStreams = true
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
-      // Configure output to a file
-      outputs.upToDateWhen { false }
-      def logDir = new File("${buildDir}/test-logs")
-      if (!logDir.exists()) {
-        logDir.mkdirs()
-      }
-      def logFile = new File(logDir, "test-output.log")
-      def outputStream = new FileOutputStream(logFile, true) // Append to the file
-      def printStream = new PrintStream(outputStream)
-      addTestOutputListener { descriptor, event ->
-        printStream.println("Test: ${descriptor.name} - ${event.resultType}")
-        if (event.exception) {
-          event.exception.printStackTrace(printStream)
-        }
-      }
     }
     outputs.upToDateWhen { false }
+    def logDir = new File("${buildDir}/test-logs")
+    if (!logDir.exists()) {
+      logDir.mkdirs()
+      println "Created test-logs directory: ${logDir.absolutePath}"
+    } else {
+      println "test-logs directory already exists: ${logDir.absolutePath}"
+    }
+    def logFile = new File(logDir, "test-output.log")
+    def outputStream = new FileOutputStream(logFile, true) // Append to the file
+    def printStream = new PrintStream(outputStream)
+    println "Created test-output.log file: ${logFile.absolutePath}"
+    standardOutput = printStream
+    standardError = printStream
   }
 
   javadoc {
