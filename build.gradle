@@ -374,8 +374,10 @@ allprojects {
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
       outputs.upToDateWhen { false }
-      standardOutput = printStream
-      standardError = printStream
+    }
+    doFirst {
+      System.setOut(printStream)
+      System.setErr(printStream)
     }
   }
 
