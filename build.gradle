@@ -363,6 +363,15 @@ allprojects {
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
     }
+    // Log test output to a file
+    doFirst {
+      def logFile = new File("${buildDir}/test-logs/test-output.log")
+      logFile.parentFile.mkdirs()
+      def outputStream = new FileOutputStream(logFile)
+      standardOutput = outputStream
+      errorOutput = outputStream
+    }
+    outputs.upToDateWhen { false }
   }
 
   javadoc {
