@@ -374,17 +374,6 @@ allprojects {
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
       outputs.upToDateWhen { false }
-      def logDir = new File("${buildDir}/test-logs")
-      if (!logDir.exists()) {
-        logDir.mkdirs()
-        println "Created test-logs directory: ${logDir.absolutePath}"
-      } else {
-        println "test-logs directory already exists: ${logDir.absolutePath}"
-      }
-      def logFile = new File(logDir, "test-output.log")
-      def outputStream = new FileOutputStream(logFile, true) // Append to the file
-      def printStream = new PrintStream(outputStream)
-      println "Created test-output.log file: ${logFile.absolutePath}"
       standardOutput = printStream
       standardError = printStream
     }
