@@ -365,6 +365,7 @@ allprojects {
     }
     // Log test output to a file
     doFirst {
+      println "Starting the doFirst block for test task"
       println "Executing doFirst block for test task"
       def logDir = new File("${buildDir}/test-logs")
       println "Attempting to create test logs directory: ${logDir.absolutePath}"
