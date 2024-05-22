@@ -369,7 +369,7 @@ allprojects {
         logDir.mkdirs()
       }
       def logFile = new File(logDir, "test-output.log")
-      def outputStream = new FileOutputStream(logFile)
+      def outputStream = new FileOutputStream(logFile, true) // Append to the file
       def printStream = new PrintStream(outputStream)
       addTestOutputListener { descriptor, event ->
         printStream.println("Test: ${descriptor.name} - ${event.resultType}")
