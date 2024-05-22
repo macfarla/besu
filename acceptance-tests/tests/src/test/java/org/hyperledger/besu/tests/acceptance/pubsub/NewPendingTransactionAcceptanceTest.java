@@ -26,6 +26,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
+
 public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
 
   private Vertx vertx;
@@ -121,6 +123,9 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     final Subscription minerSubscription = minerWebSocket.subscribe();
     System.out.println("Subscribed to miner node");
 
+    BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
+    System.out.println("Initial Balance: " + initialBalance);
+
     final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 1));
     System.out.println("Event one created: " + eventOne);
     cluster.verify(accountOne.balanceEquals(1));
@@ -137,6 +142,9 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     minerWebSocket.verifyTotalEventsReceived(3);
     minerSubscription.verifyEventReceived(eventTwo);
     minerSubscription.verifyEventReceived(eventThree);
+
+    BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
+    System.out.println("Final Balance: " + finalBalance);
 
     minerWebSocket.unsubscribe(minerSubscription);
     System.out.println("Unsubscribed from miner node");
