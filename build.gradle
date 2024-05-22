@@ -315,82 +315,27 @@ allprojects {
    *
    */
   test {
-    jvmArgs += [
-      '-Xmx4g',
-      '-XX:-UseGCOverheadLimit',
-      // Mockito and jackson-databind do some strange reflection during tests.
-      // This suppresses an illegal access warning.
-      '--add-opens',
-      'java.base/java.util=ALL-UNNAMED',
-      '--add-opens',
-      'java.base/java.util.concurrent=ALL-UNNAMED',
-      '--add-opens',
-      'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
-      // errorprone tests need access to the javac compiler
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
-      '--add-exports',
-      'jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
-    ]
-    Set toImport = [
-      'test.ethereum.include',
-      'test.ethereum.state.eip',
-      'root.log.level',
-      'evm.log.level',
-      'acctests.keepLogsOfPassingTests'
-    ]
-    for (String name : toImport) {
-      if (System.getProperty(name) != null) {
-        systemProperty name, System.getProperty(name)
-      }
-    }
     useJUnitPlatform {}
     // additional configuration for detailed test logging
-    def logDir = new File("${buildDir}/test-logs")
-    if (!logDir.exists()) {
-      logDir.mkdirs()
-      println "Created test-logs directory: ${logDir.absolutePath}"
-    } else {
-      println "test-logs directory already exists: ${logDir.absolutePath}"
-    }
-    def logFile = new File(logDir, "test-output.log")
-    def outputStream = new FileOutputStream(logFile, true) // Append to the file
-    def printStream = new PrintStream(outputStream)
-    println "Created test-output.log file: ${logFile.absolutePath}"
     testLogging {
       showStandardStreams = true
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
       outputs.upToDateWhen { false }
     }
-    doFirst {
-      println "Executing doFirst block in test task"
+    afterTest { descriptor, result ->
+      def logDir = new File("${buildDir}/test-logs")
       if (!logDir.exists()) {
         logDir.mkdirs()
         println "Created test-logs directory: ${logDir.absolutePath}"
       } else {
         println "test-logs directory already exists: ${logDir.absolutePath}"
       }
-      if (!logFile.exists()) {
-        logFile.createNewFile()
-        println "Created test-output.log file: ${logFile.absolutePath}"
-      } else {
-        println "test-output.log file already exists: ${logFile.absolutePath}"
+      def logFile = new File(logDir, "test-output.log")
+      logFile.withWriterAppend { writer ->
+        writer.writeLine("Test: ${descriptor.name} - ${result.resultType}")
+        writer.writeLine("Standard output and error streams redirected to test-output.log")
       }
-      System.setOut(printStream)
-      System.setErr(printStream)
     }
   }
 
