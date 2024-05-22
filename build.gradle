@@ -376,6 +376,19 @@ allprojects {
       outputs.upToDateWhen { false }
     }
     doFirst {
+      println "Executing doFirst block in test task"
+      if (!logDir.exists()) {
+        logDir.mkdirs()
+        println "Created test-logs directory: ${logDir.absolutePath}"
+      } else {
+        println "test-logs directory already exists: ${logDir.absolutePath}"
+      }
+      if (!logFile.exists()) {
+        logFile.createNewFile()
+        println "Created test-output.log file: ${logFile.absolutePath}"
+      } else {
+        println "test-output.log file already exists: ${logFile.absolutePath}"
+      }
       System.setOut(printStream)
       System.setErr(printStream)
     }
