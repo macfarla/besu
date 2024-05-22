@@ -375,8 +375,16 @@ allprojects {
     def outputStream = new FileOutputStream(logFile, true) // Append to the file
     def printStream = new PrintStream(outputStream)
     println "Created test-output.log file: ${logFile.absolutePath}"
-    standardOutput = printStream
-    standardError = printStream
+    testLogging.showStandardStreams = true
+    testLogging.exceptionFormat = 'full'
+    testLogging.events "passed", "skipped", "failed"
+    testLogging.outputs.upToDateWhen { false }
+    testLogging.addTestOutputListener { descriptor, event ->
+      printStream.println("Test: ${descriptor.name} - ${event.resultType}")
+      if (event.exception) {
+        event.exception.printStackTrace(printStream)
+      }
+    }
   }
 
   javadoc {
