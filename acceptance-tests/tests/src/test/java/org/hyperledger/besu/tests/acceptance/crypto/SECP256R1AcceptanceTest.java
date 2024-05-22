@@ -128,3 +128,4 @@ minerNode.verify(recipient.balanceEquals(5));
     return SECP256R1_SIGNATURE_ALGORITHM.createKeyPair(
         SECP256R1_SIGNATURE_ALGORITHM.createPrivateKey(Bytes32.fromHexString(privateKey)));
   }
+}
