@@ -1,0 +1,202 @@
+
+> Configure project :
+Generating project version as supplied is version not semver: unspecified
+
+> Task :crypto:algorithms:compileJava UP-TO-DATE
+> Task :ethereum:rlp:compileJava UP-TO-DATE
+> Task :datatypes:compileJava UP-TO-DATE
+> Task :util:compileJava UP-TO-DATE
+> Task :config:compileJava UP-TO-DATE
+> Task :enclave:compileJava UP-TO-DATE
+> Task :evm:compileJava UP-TO-DATE
+> Task :nat:compileJava UP-TO-DATE
+> Task :pki:compileJava UP-TO-DATE
+> Task :plugin-api:compileJava UP-TO-DATE
+> Task :crypto:services:compileJava UP-TO-DATE
+> Task :ethereum:trie:compileJava UP-TO-DATE
+> Task :metrics:core:compileJava UP-TO-DATE
+> Task :services:kvstore:compileJava UP-TO-DATE
+> Task :ethereum:core:compileJava UP-TO-DATE
+> Task :ethereum:p2p:compileJava UP-TO-DATE
+> Task :ethereum:permissioning:compileJava UP-TO-DATE
+> Task :services:pipeline:compileJava UP-TO-DATE
+> Task :services:tasks:compileJava UP-TO-DATE
+> Task :ethereum:eth:compileJava UP-TO-DATE
+> Task :ethereum:blockcreation:compileJava UP-TO-DATE
+> Task :consensus:merge:compileJava UP-TO-DATE
+> Task :ethereum:api:compileJava UP-TO-DATE
+> Task :consensus:common:compileJava UP-TO-DATE
+> Task :consensus:clique:compileJava UP-TO-DATE
+> Task :consensus:ibft:compileJava UP-TO-DATE
+> Task :consensus:qbft:compileJava UP-TO-DATE
+> Task :ethereum:ethstats:compileJava UP-TO-DATE
+> Task :ethereum:retesteth:compileJava UP-TO-DATE
+> Task :ethereum:stratum:compileJava UP-TO-DATE
+> Task :metrics:rocksdb:compileJava UP-TO-DATE
+> Task :plugins:rocksdb:compileJava UP-TO-DATE
+> Task :besu:compileJava UP-TO-DATE
+> Task :testutil:compileJava UP-TO-DATE
+> Task :ethereum:core:processResources UP-TO-DATE
+> Task :ethereum:core:classes UP-TO-DATE
+> Task :ethereum:core:compileTestSupportJava UP-TO-DATE
+> Task :ethereum:core:processTestSupportResources NO-SOURCE
+> Task :ethereum:core:testSupportClasses UP-TO-DATE
+> Task :ethereum:core:testSupportJar
+> Task :ethereum:referencetests:compileJava UP-TO-DATE
+> Task :ethereum:evmtool:compileJava UP-TO-DATE
+> Task :compileJava NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :besu:processResources UP-TO-DATE
+> Task :besu:classes UP-TO-DATE
+> Task :besu:jar
+> Task :config:processResources UP-TO-DATE
+> Task :config:classes UP-TO-DATE
+> Task :config:jar
+> Task :datatypes:processResources NO-SOURCE
+> Task :datatypes:classes UP-TO-DATE
+> Task :datatypes:jar
+> Task :enclave:processResources NO-SOURCE
+> Task :enclave:classes UP-TO-DATE
+> Task :enclave:jar
+> Task :evm:processResources UP-TO-DATE
+> Task :evm:classes UP-TO-DATE
+> Task :evm:jar
+> Task :nat:processResources NO-SOURCE
+> Task :nat:classes UP-TO-DATE
+> Task :nat:jar
+> Task :pki:processResources NO-SOURCE
+> Task :pki:classes UP-TO-DATE
+> Task :pki:jar
+> Task :plugin-api:processResources NO-SOURCE
+> Task :plugin-api:classes UP-TO-DATE
+> Task :plugin-api:jar
+> Task :util:processResources NO-SOURCE
+> Task :util:classes UP-TO-DATE
+> Task :util:jar
+> Task :consensus:clique:processResources NO-SOURCE
+> Task :consensus:clique:classes UP-TO-DATE
+> Task :consensus:clique:jar
+> Task :consensus:common:processResources NO-SOURCE
+> Task :consensus:common:classes UP-TO-DATE
+> Task :consensus:common:jar
+> Task :consensus:ibft:processResources NO-SOURCE
+> Task :consensus:ibft:classes UP-TO-DATE
+> Task :consensus:ibft:jar
+> Task :consensus:merge:processResources NO-SOURCE
+> Task :consensus:merge:classes UP-TO-DATE
+> Task :consensus:merge:jar
+> Task :consensus:qbft:processResources NO-SOURCE
+> Task :consensus:qbft:classes UP-TO-DATE
+> Task :consensus:qbft:jar
+> Task :crypto:algorithms:processResources NO-SOURCE
+> Task :crypto:algorithms:classes UP-TO-DATE
+> Task :crypto:algorithms:jar
+> Task :crypto:services:processResources NO-SOURCE
+> Task :crypto:services:classes UP-TO-DATE
+> Task :crypto:services:jar
+> Task :ethereum:api:processResources UP-TO-DATE
+> Task :ethereum:api:classes UP-TO-DATE
+> Task :ethereum:api:jar
+> Task :ethereum:blockcreation:processResources NO-SOURCE
+> Task :ethereum:blockcreation:classes UP-TO-DATE
+> Task :ethereum:blockcreation:jar
+> Task :ethereum:core:jar
+> Task :ethereum:eth:processResources NO-SOURCE
+> Task :ethereum:eth:classes UP-TO-DATE
+> Task :ethereum:eth:jar
+> Task :ethereum:ethstats:processResources NO-SOURCE
+> Task :ethereum:ethstats:classes UP-TO-DATE
+> Task :ethereum:ethstats:jar
+> Task :ethereum:evmtool:processResources UP-TO-DATE
+> Task :ethereum:evmtool:classes UP-TO-DATE
+> Task :ethereum:evmtool:jar
+> Task :ethereum:p2p:processResources NO-SOURCE
+> Task :ethereum:p2p:classes UP-TO-DATE
+> Task :ethereum:p2p:jar
+> Task :ethereum:permissioning:processResources NO-SOURCE
+> Task :ethereum:permissioning:classes UP-TO-DATE
+> Task :ethereum:permissioning:jar
+> Task :ethereum:referencetests:validateReferenceTestSubmodule
+> Task :ethereum:referencetests:processResources NO-SOURCE
+> Task :ethereum:referencetests:classes UP-TO-DATE
+> Task :ethereum:referencetests:jar
+> Task :ethereum:retesteth:processResources NO-SOURCE
+> Task :ethereum:retesteth:classes UP-TO-DATE
+> Task :ethereum:retesteth:jar
+> Task :ethereum:rlp:processResources NO-SOURCE
+> Task :ethereum:rlp:classes UP-TO-DATE
+> Task :ethereum:rlp:jar
+> Task :ethereum:stratum:processResources NO-SOURCE
+> Task :ethereum:stratum:classes UP-TO-DATE
+> Task :ethereum:stratum:jar
+> Task :ethereum:trie:processResources NO-SOURCE
+> Task :ethereum:trie:classes UP-TO-DATE
+> Task :ethereum:trie:jar
+> Task :metrics:core:processResources NO-SOURCE
+> Task :metrics:core:classes UP-TO-DATE
+> Task :metrics:core:jar
+> Task :metrics:rocksdb:processResources NO-SOURCE
+> Task :metrics:rocksdb:classes UP-TO-DATE
+> Task :metrics:rocksdb:jar
+> Task :plugins:rocksdb:processResources NO-SOURCE
+> Task :plugins:rocksdb:classes UP-TO-DATE
+> Task :plugins:rocksdb:jar
+> Task :services:kvstore:processResources NO-SOURCE
+> Task :services:kvstore:classes UP-TO-DATE
+> Task :services:kvstore:jar
+> Task :services:pipeline:processResources NO-SOURCE
+> Task :services:pipeline:classes UP-TO-DATE
+> Task :services:pipeline:jar
+> Task :services:tasks:processResources NO-SOURCE
+> Task :services:tasks:classes UP-TO-DATE
+> Task :services:tasks:jar
+> Task :autocomplete
+> Task :checkLicensePreparation
+> Task :pki:compileTestJava UP-TO-DATE
+> Task :pki:processTestResources UP-TO-DATE
+> Task :pki:testClasses UP-TO-DATE
+> Task :pki:testJar
+> Task :testutil:processResources UP-TO-DATE
+> Task :testutil:classes UP-TO-DATE
+> Task :testutil:jar
+> Task :generateLicenseReport
+> Task :checkLicense UP-TO-DATE
+> Task :jar SKIPPED
+> Task :evmToolStartScripts
+> Task :startScripts
+> Task :untunedStartScripts
+> Task :installDist
+> Task :privacy-contracts:compileJava UP-TO-DATE
+> Task :privacy-contracts:processResources NO-SOURCE
+> Task :privacy-contracts:classes UP-TO-DATE
+> Task :privacy-contracts:jar
+> Task :acceptance-tests:dsl:compileJava UP-TO-DATE
+> Task :acceptance-tests:dsl:processResources NO-SOURCE
+> Task :acceptance-tests:dsl:classes UP-TO-DATE
+> Task :acceptance-tests:dsl:jar
+> Task :acceptance-tests:test-plugins:compileJava UP-TO-DATE
+> Task :acceptance-tests:test-plugins:processResources NO-SOURCE
+> Task :acceptance-tests:test-plugins:classes UP-TO-DATE
+> Task :acceptance-tests:test-plugins:jar
+> Task :acceptance-tests:tests:compileSolidity UP-TO-DATE
+> Task :acceptance-tests:tests:generateContractWrappers UP-TO-DATE
+> Task :acceptance-tests:tests:compileJava UP-TO-DATE
+> Task :acceptance-tests:tests:processResources NO-SOURCE
+> Task :acceptance-tests:tests:classes UP-TO-DATE
+> Task :acceptance-tests:tests:compileTestSolidity NO-SOURCE
+> Task :acceptance-tests:tests:generateTestContractWrappers NO-SOURCE
+> Task :acceptance-tests:tests:compileTestJava
+> Task :acceptance-tests:test-plugins:testPluginsJar
+> Task :acceptance-tests:tests:processTestResources
+> Task :acceptance-tests:tests:testClasses
+> Task :acceptance-tests:tests:acceptanceTestMainnet
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.7/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1m 40s
+106 actionable tasks: 53 executed, 53 up-to-date

@@ -357,6 +357,12 @@ allprojects {
       }
     }
     useJUnitPlatform {}
+    // additional configuration for detailed test logging
+    testLogging {
+      showStandardStreams = true
+      exceptionFormat = 'full'
+      events "passed", "skipped", "failed"
+    }
   }
 
   javadoc {
