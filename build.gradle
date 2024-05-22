@@ -363,6 +363,8 @@ allprojects {
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
     }
+    test.testLogging.standardOutput = printStream
+    test.testLogging.standardError = printStream
     test.outputs.upToDateWhen { false }
     def logDir = new File("${buildDir}/test-logs")
     if (!logDir.exists()) {
@@ -378,7 +380,9 @@ allprojects {
     testLogging.showStandardStreams = true
     testLogging.exceptionFormat = 'full'
     testLogging.events "passed", "skipped", "failed"
-    // Removed the addTestOutputListener method as it is not a standard Gradle method
+    // Set the standard output and error streams to the printStream
+    test.testLogging.standardOutput = printStream
+    test.testLogging.standardError = printStream
   }
 
   javadoc {
