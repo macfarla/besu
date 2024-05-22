@@ -146,6 +146,22 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
     System.out.println("Final Balance: " + finalBalance);
 
+    // Log the current block number
+    final var currentBlock = minerNode.execute(ethTransactions.block());
+    System.out.println("Current Block Number: " + currentBlock.getNumber());
+
+    // Log the transaction receipt for event one
+    final var receiptOne = minerNode.execute(ethTransactions.getTransactionReceipt(eventOne.toString()));
+    System.out.println("Transaction Receipt for Event One: " + receiptOne);
+
+    // Log the transaction receipt for event two
+    final var receiptTwo = minerNode.execute(ethTransactions.getTransactionReceipt(eventTwo.toString()));
+    System.out.println("Transaction Receipt for Event Two: " + receiptTwo);
+
+    // Log the transaction receipt for event three
+    final var receiptThree = minerNode.execute(ethTransactions.getTransactionReceipt(eventThree.toString()));
+    System.out.println("Transaction Receipt for Event Three: " + receiptThree);
+
     minerWebSocket.unsubscribe(minerSubscription);
     System.out.println("Unsubscribed from miner node");
 
