@@ -367,23 +367,27 @@ allprojects {
     doFirst {
       println "Executing doFirst block for test task"
       def logDir = new File("${buildDir}/test-logs")
+      println "Attempting to create test logs directory: ${logDir.absolutePath}"
       if (!logDir.exists()) {
         if (logDir.mkdirs()) {
           println "Test logs directory created successfully: ${logDir.absolutePath}"
         } else {
           println "Failed to create test logs directory: ${logDir.absolutePath}"
         }
+      } else {
+        println "Test logs directory already exists: ${logDir.absolutePath}"
       }
       def logFile = new File(logDir, "test-output.log")
+      println "Attempting to create test output log file: ${logFile.absolutePath}"
       try {
         def outputStream = new FileOutputStream(logFile)
-        standardOutput = outputStream
-        errorOutput = outputStream
+        println "Test output will be logged to: ${logFile.absolutePath}"
+        System.setOut(new PrintStream(outputStream))
+        System.setErr(new PrintStream(outputStream))
       } catch (IOException e) {
         println "Failed to create test output log file: ${logFile.absolutePath}"
         e.printStackTrace()
       }
-      println "Test output will be logged to: ${logFile.absolutePath}"
     }
     outputs.upToDateWhen { false }
   }
@@ -843,6 +847,7 @@ task dockerUpload {
 }
 
 task dockerUploadRelease {
+  dependsOn distDocker
   def archs = ["arm64", "amd64"]
   def image = "${dockerImageName}:${dockerBuildVersion}"
 
