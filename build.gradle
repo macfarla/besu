@@ -378,12 +378,7 @@ allprojects {
     testLogging.showStandardStreams = true
     testLogging.exceptionFormat = 'full'
     testLogging.events "passed", "skipped", "failed"
-    testLogging.addTestOutputListener { descriptor, event ->
-      printStream.println("Test: ${descriptor.name} - ${event.resultType}")
-      if (event.exception) {
-        event.exception.printStackTrace(printStream)
-      }
-    }
+    // Removed the addTestOutputListener method as it is not a standard Gradle method
   }
 
   javadoc {
