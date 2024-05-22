@@ -27,7 +27,9 @@ import org.hyperledger.besu.tests.acceptance.dsl.node.Node;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.Cluster;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.ClusterConfiguration;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.ClusterConfigurationBuilder;
+import org.hyperledger.besu.tests.acceptance.dsl.transaction.eth.EthTransactions;
 
+import java.math.BigInteger;
 import java.util.List;
 
 import org.apache.tuweni.bytes.Bytes32;
@@ -81,6 +83,10 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
 
     final Account recipient = accounts.createAccount("recipient");
 
+    EthTransactions ethTransactions = new EthTransactions();
+    BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(recipient));
+    System.out.println("Initial Balance: " + initialBalance);
+
     final Hash transactionHash =
         minerNode.execute(accountTransactions.createTransfer(recipient, 5, new SECP256R1()));
     assertThat(transactionHash).isNotNull();
@@ -90,6 +96,9 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
 
     // Check the transaction receipt to confirm the transaction was mined
     minerNode.verify(eth.expectSuccessfulTransactionReceipt(transactionHash.toString()));
+
+    BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(recipient));
+    System.out.println("Final Balance: " + finalBalance);
 
     noDiscoveryCluster.verify(recipient.balanceEquals(5));
   }
