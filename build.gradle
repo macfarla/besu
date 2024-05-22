@@ -365,11 +365,15 @@ allprojects {
     }
     // Log test output to a file
     doFirst {
-      def logFile = new File("${buildDir}/test-logs/test-output.log")
-      logFile.parentFile.mkdirs()
+      def logDir = new File("${buildDir}/test-logs")
+      if (!logDir.exists()) {
+        logDir.mkdirs()
+      }
+      def logFile = new File(logDir, "test-output.log")
       def outputStream = new FileOutputStream(logFile)
       standardOutput = outputStream
       errorOutput = outputStream
+      println "Test output will be logged to: ${logFile.absolutePath}"
     }
     outputs.upToDateWhen { false }
   }
