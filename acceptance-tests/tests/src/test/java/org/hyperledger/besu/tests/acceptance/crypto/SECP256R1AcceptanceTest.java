@@ -27,7 +27,9 @@ import org.hyperledger.besu.tests.acceptance.dsl.node.Node;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.Cluster;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.ClusterConfiguration;
 import org.hyperledger.besu.tests.acceptance.dsl.node.cluster.ClusterConfigurationBuilder;
+import org.hyperledger.besu.tests.acceptance.dsl.transaction.eth.EthTransactions;
 
+import java.math.BigInteger;
 import java.util.List;
 
 import org.apache.tuweni.bytes.Bytes32;
@@ -81,9 +83,37 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
 
     final Account recipient = accounts.createAccount("recipient");
 
+    // Confirm the creation of the recipient account
+    System.out.println("Recipient account created: " + recipient.getAddress());
+
+    EthTransactions ethTransactions = new EthTransactions();
+    BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(recipient));
+    System.out.println("Initial Balance: " + initialBalance);
+
     final Hash transactionHash =
         minerNode.execute(accountTransactions.createTransfer(recipient, 5, new SECP256R1()));
     assertThat(transactionHash).isNotNull();
+
+    // Log the transaction hash for debugging purposes
+    System.out.println("Transaction Hash: " + transactionHash);
+
+// Log the transaction details
+// Removed undefined methods getGasPrice(), getGasLimit(), and getNonce()
+
+// Check the transaction receipt to confirm the transaction was mined
+minerNode.verify(eth.expectSuccessfulTransactionReceipt(transactionHash.toString()));
+
+// Log the receipt status and details
+System.out.println("Transaction receipt status: " + minerNode.execute(ethTransactions.getTransactionReceipt(transactionHash.toString())).get().getStatus());
+System.out.println("Transaction receipt details: " + minerNode.execute(ethTransactions.getTransactionReceipt(transactionHash.toString())).get());
+
+// Log the balance of the recipient after the transaction
+BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(recipient));
+System.out.println("Final Balance: " + finalBalance);
+
+// Log the result of the balance verification
+minerNode.verify(recipient.balanceEquals(5));
+
     noDiscoveryCluster.verify(recipient.balanceEquals(5));
   }
 

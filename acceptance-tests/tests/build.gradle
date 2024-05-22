@@ -133,6 +133,7 @@ task acceptanceTestMainnet(type: Test) {
   setSystemProperties(test.getSystemProperties())
   systemProperty 'acctests.runBesuAsProcess', 'true'
   systemProperty 'java.security.properties', "${buildDir}/resources/test/acceptanceTesting.security"
+  systemProperty 'acctests.showStandardStreams', 'true' // Enable standard streams logging
   mustRunAfter rootProject.subprojects*.test
   description = 'Runs MAINNET Besu acceptance tests (excluding permissioning, privacy and some other stable features).'
   group = 'verification'
@@ -142,7 +143,7 @@ task acceptanceTestMainnet(type: Test) {
   testLogging {
     exceptionFormat = 'full'
     showStackTraces = true
-    showStandardStreams = Boolean.getBoolean('acctests.showStandardStreams')
+    showStandardStreams = true
     showExceptions = true
     showCauses = true
   }
