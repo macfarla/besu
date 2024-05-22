@@ -335,7 +335,9 @@ allprojects {
       logFile.withWriterAppend { writer ->
         writer.writeLine("Test: ${descriptor.name} - ${result.resultType}")
         writer.writeLine("Standard output and error streams redirected to test-output.log")
+        println "Appended test result to test-output.log: ${descriptor.name} - ${result.resultType}"
       }
+      println "Completed afterTest block for: ${descriptor.name}"
     }
   }
 

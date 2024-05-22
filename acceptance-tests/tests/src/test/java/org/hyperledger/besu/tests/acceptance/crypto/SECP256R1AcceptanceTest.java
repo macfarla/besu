@@ -83,6 +83,9 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
 
     final Account recipient = accounts.createAccount("recipient");
 
+    // Confirm the creation of the recipient account
+    System.out.println("Recipient account created: " + recipient.getAddress());
+
     EthTransactions ethTransactions = new EthTransactions();
     BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(recipient));
     System.out.println("Initial Balance: " + initialBalance);
@@ -94,11 +97,22 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
     // Log the transaction hash for debugging purposes
     System.out.println("Transaction Hash: " + transactionHash);
 
-    // Check the transaction receipt to confirm the transaction was mined
-    minerNode.verify(eth.expectSuccessfulTransactionReceipt(transactionHash.toString()));
+// Log the transaction details
+// Removed undefined methods getGasPrice(), getGasLimit(), and getNonce()
 
-    BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(recipient));
-    System.out.println("Final Balance: " + finalBalance);
+// Check the transaction receipt to confirm the transaction was mined
+minerNode.verify(eth.expectSuccessfulTransactionReceipt(transactionHash.toString()));
+
+// Log the receipt status and details
+System.out.println("Transaction receipt status: " + minerNode.execute(ethTransactions.getTransactionReceipt(transactionHash.toString())).get().getStatus());
+System.out.println("Transaction receipt details: " + minerNode.execute(ethTransactions.getTransactionReceipt(transactionHash.toString())).get());
+
+// Log the balance of the recipient after the transaction
+BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(recipient));
+System.out.println("Final Balance: " + finalBalance);
+
+// Log the result of the balance verification
+minerNode.verify(recipient.balanceEquals(5));
 
     noDiscoveryCluster.verify(recipient.balanceEquals(5));
   }
@@ -114,4 +128,3 @@ public class SECP256R1AcceptanceTest extends AcceptanceTestBase {
     return SECP256R1_SIGNATURE_ALGORITHM.createKeyPair(
         SECP256R1_SIGNATURE_ALGORITHM.createPrivateKey(Bytes32.fromHexString(privateKey)));
   }
-}
