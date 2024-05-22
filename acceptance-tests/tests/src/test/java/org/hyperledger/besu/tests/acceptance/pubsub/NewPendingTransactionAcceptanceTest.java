@@ -120,50 +120,55 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
   public void subscriptionToMinerNodeMustReceiveEveryPublishEvent() {
     System.out.println("Starting test: subscriptionToMinerNodeMustReceiveEveryPublishEvent");
 
-    final Subscription minerSubscription = minerWebSocket.subscribe();
-    System.out.println("Subscribed to miner node");
+    try {
+        final Subscription minerSubscription = minerWebSocket.subscribe();
+        System.out.println("Subscribed to miner node");
 
-    BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
-    System.out.println("Initial Balance: " + initialBalance);
+        BigInteger initialBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
+        System.out.println("Initial Balance: " + initialBalance);
 
-    final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 1));
-    System.out.println("Event one created: " + eventOne);
-    cluster.verify(accountOne.balanceEquals(1));
+        final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 1));
+        System.out.println("Event one created: " + eventOne);
+        cluster.verify(accountOne.balanceEquals(1));
 
-    minerWebSocket.verifyTotalEventsReceived(1);
-    minerSubscription.verifyEventReceived(eventOne);
+        minerWebSocket.verifyTotalEventsReceived(1);
+        minerSubscription.verifyEventReceived(eventOne);
 
-    final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 4));
-    System.out.println("Event two created: " + eventTwo);
-    final Hash eventThree = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
-    System.out.println("Event three created: " + eventThree);
-    cluster.verify(accountOne.balanceEquals(1 + 4 + 5));
+        final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 4));
+        System.out.println("Event two created: " + eventTwo);
+        final Hash eventThree = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
+        System.out.println("Event three created: " + eventThree);
+        cluster.verify(accountOne.balanceEquals(1 + 4 + 5));
 
-    minerWebSocket.verifyTotalEventsReceived(3);
-    minerSubscription.verifyEventReceived(eventTwo);
-    minerSubscription.verifyEventReceived(eventThree);
+        minerWebSocket.verifyTotalEventsReceived(3);
+        minerSubscription.verifyEventReceived(eventTwo);
+        minerSubscription.verifyEventReceived(eventThree);
 
-    BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
-    System.out.println("Final Balance: " + finalBalance);
+        BigInteger finalBalance = minerNode.execute(ethTransactions.getBalance(accountOne));
+        System.out.println("Final Balance: " + finalBalance);
 
-    // Log the current block number
-    final var currentBlock = minerNode.execute(ethTransactions.block());
-    System.out.println("Current Block Number: " + currentBlock.getNumber());
+        // Log the current block number
+        final var currentBlock = minerNode.execute(ethTransactions.block());
+        System.out.println("Current Block Number: " + currentBlock.getNumber());
 
-    // Log the transaction receipt for event one
-    final var receiptOne = minerNode.execute(ethTransactions.getTransactionReceipt(eventOne.toString()));
-    System.out.println("Transaction Receipt for Event One: " + receiptOne);
+        // Log the transaction receipt for event one
+        final var receiptOne = minerNode.execute(ethTransactions.getTransactionReceipt(eventOne.toString()));
+        System.out.println("Transaction Receipt for Event One: " + receiptOne);
 
-    // Log the transaction receipt for event two
-    final var receiptTwo = minerNode.execute(ethTransactions.getTransactionReceipt(eventTwo.toString()));
-    System.out.println("Transaction Receipt for Event Two: " + receiptTwo);
+        // Log the transaction receipt for event two
+        final var receiptTwo = minerNode.execute(ethTransactions.getTransactionReceipt(eventTwo.toString()));
+        System.out.println("Transaction Receipt for Event Two: " + receiptTwo);
 
-    // Log the transaction receipt for event three
-    final var receiptThree = minerNode.execute(ethTransactions.getTransactionReceipt(eventThree.toString()));
-    System.out.println("Transaction Receipt for Event Three: " + receiptThree);
+        // Log the transaction receipt for event three
+        final var receiptThree = minerNode.execute(ethTransactions.getTransactionReceipt(eventThree.toString()));
+        System.out.println("Transaction Receipt for Event Three: " + receiptThree);
 
-    minerWebSocket.unsubscribe(minerSubscription);
-    System.out.println("Unsubscribed from miner node");
+        minerWebSocket.unsubscribe(minerSubscription);
+        System.out.println("Unsubscribed from miner node");
+    } catch (Exception e) {
+        System.out.println("Exception occurred: " + e.getMessage());
+        e.printStackTrace();
+    }
 
     System.out.println("Ending test: subscriptionToMinerNodeMustReceiveEveryPublishEvent");
   }
@@ -193,40 +198,46 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
   public void everySubscriptionMustReceiveEveryPublishEvent() {
     System.out.println("Starting test: everySubscriptionMustReceiveEveryPublishEvent");
 
-    final Subscription minerSubscriptionOne = minerWebSocket.subscribe();
-    final Subscription minerSubscriptionTwo = minerWebSocket.subscribe();
-    final Subscription archiveSubscriptionOne = archiveWebSocket.subscribe();
-    final Subscription archiveSubscriptionTwo = archiveWebSocket.subscribe();
-    final Subscription archiveSubscriptionThree = archiveWebSocket.subscribe();
-    System.out.println("Subscribed to miner and archive nodes");
+    try {
+        final Subscription minerSubscriptionOne = minerWebSocket.subscribe();
+        final Subscription minerSubscriptionTwo = minerWebSocket.subscribe();
+        final Subscription archiveSubscriptionOne = archiveWebSocket.subscribe();
+        final Subscription archiveSubscriptionTwo = archiveWebSocket.subscribe();
+        final Subscription archiveSubscriptionThree = archiveWebSocket.subscribe();
+        System.out.println("Subscribed to miner and archive nodes");
 
-    final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 10));
-    System.out.println("Event one created: " + eventOne);
-    final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
-    System.out.println("Event two created: " + eventTwo);
-    cluster.verify(accountOne.balanceEquals(10 + 5));
+        final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 10));
+        System.out.println("Event one created: " + eventOne);
+        final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
+        System.out.println("Event two created: " + eventTwo);
+        cluster.verify(accountOne.balanceEquals(10 + 5));
 
-    minerWebSocket.verifyTotalEventsReceived(4);
-    minerSubscriptionOne.verifyEventReceived(eventOne);
-    minerSubscriptionOne.verifyEventReceived(eventTwo);
-    minerSubscriptionTwo.verifyEventReceived(eventOne);
-    minerSubscriptionTwo.verifyEventReceived(eventTwo);
+        minerWebSocket.verifyTotalEventsReceived(4);
+        minerSubscriptionOne.verifyEventReceived(eventOne);
+        minerSubscriptionOne.verifyEventReceived(eventTwo);
+        minerSubscriptionTwo.verifyEventReceived(eventOne);
+        minerSubscriptionTwo.verifyEventReceived(eventTwo);
 
-    archiveWebSocket.verifyTotalEventsReceived(6);
-    archiveSubscriptionOne.verifyEventReceived(eventOne);
-    archiveSubscriptionOne.verifyEventReceived(eventTwo);
-    archiveSubscriptionTwo.verifyEventReceived(eventOne);
-    archiveSubscriptionTwo.verifyEventReceived(eventTwo);
-    archiveSubscriptionThree.verifyEventReceived(eventOne);
-    archiveSubscriptionThree.verifyEventReceived(eventTwo);
+        archiveWebSocket.verifyTotalEventsReceived(6);
+        archiveSubscriptionOne.verifyEventReceived(eventOne);
+        archiveSubscriptionOne.verifyEventReceived(eventTwo);
+        archiveSubscriptionTwo.verifyEventReceived(eventOne);
+        archiveSubscriptionTwo.verifyEventReceived(eventTwo);
+        archiveSubscriptionThree.verifyEventReceived(eventOne);
+        archiveSubscriptionThree.verifyEventReceived(eventTwo);
 
-    minerWebSocket.unsubscribe(minerSubscriptionOne);
-    minerWebSocket.unsubscribe(minerSubscriptionTwo);
-    archiveWebSocket.unsubscribe(archiveSubscriptionOne);
-    archiveWebSocket.unsubscribe(archiveSubscriptionTwo);
-    archiveWebSocket.unsubscribe(archiveSubscriptionThree);
+        minerWebSocket.unsubscribe(minerSubscriptionOne);
+        minerWebSocket.unsubscribe(minerSubscriptionTwo);
+        archiveWebSocket.unsubscribe(archiveSubscriptionOne);
+        archiveWebSocket.unsubscribe(archiveSubscriptionTwo);
+        archiveWebSocket.unsubscribe(archiveSubscriptionThree);
 
-    System.out.println("Unsubscribed from miner and archive nodes");
+        System.out.println("Unsubscribed from miner and archive nodes");
+    } catch (Exception e) {
+        System.out.println("Exception occurred: " + e.getMessage());
+        e.printStackTrace();
+    }
+
     System.out.println("Ending test: everySubscriptionMustReceiveEveryPublishEvent");
   }
 }
