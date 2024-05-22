@@ -373,9 +373,10 @@ allprojects {
       showStandardStreams = true
       exceptionFormat = 'full'
       events "passed", "skipped", "failed"
+      // Set the standard output and error streams to the printStream
+      standardOutput = printStream
+      standardError = printStream
     }
-    standardOutput = printStream
-    standardError = printStream
     outputs.upToDateWhen { false }
   }
 
