@@ -367,13 +367,22 @@ allprojects {
     doFirst {
       def logDir = new File("${buildDir}/test-logs")
       if (!logDir.exists()) {
-        logDir.mkdirs()
+        if (logDir.mkdirs()) {
+          println "Test logs directory created successfully: ${logDir.absolutePath}"
+        } else {
+          println "Failed to create test logs directory: ${logDir.absolutePath}"
+        }
       }
       def logFile = new File(logDir, "test-output.log")
-      def outputStream = new FileOutputStream(logFile)
-      standardOutput = outputStream
-      errorOutput = outputStream
-      println "Test output will be logged to: ${logFile.absolutePath}"
+      try {
+        def outputStream = new FileOutputStream(logFile)
+        standardOutput = outputStream
+        errorOutput = outputStream
+        println "Test output will be logged to: ${logFile.absolutePath}"
+      } catch (IOException e) {
+        println "Failed to create test output log file: ${logFile.absolutePath}"
+        e.printStackTrace()
+      }
     }
     outputs.upToDateWhen { false }
   }
