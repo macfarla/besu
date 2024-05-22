@@ -24,7 +24,6 @@ import org.hyperledger.besu.tests.acceptance.dsl.pubsub.WebSocket;
 import io.vertx.core.Vertx;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
@@ -116,18 +115,22 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
   }
 
   @Test
-  @Disabled("test is flaky - sometimes returns more than 3 total events #6909")
   public void subscriptionToMinerNodeMustReceiveEveryPublishEvent() {
     final Subscription minerSubscription = minerWebSocket.subscribe();
 
+    System.out.println("Subscribed to miner node");
+
     final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 1));
+    System.out.println("Event one created: " + eventOne);
     cluster.verify(accountOne.balanceEquals(1));
 
     minerWebSocket.verifyTotalEventsReceived(1);
     minerSubscription.verifyEventReceived(eventOne);
 
     final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 4));
+    System.out.println("Event two created: " + eventTwo);
     final Hash eventThree = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
+    System.out.println("Event three created: " + eventThree);
     cluster.verify(accountOne.balanceEquals(1 + 4 + 5));
 
     minerWebSocket.verifyTotalEventsReceived(3);
@@ -135,6 +138,7 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     minerSubscription.verifyEventReceived(eventThree);
 
     minerWebSocket.unsubscribe(minerSubscription);
+    System.out.println("Unsubscribed from miner node");
   }
 
   @Test
@@ -159,7 +163,6 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
   }
 
   @Test
-  @Disabled("This test is flaky and needs to be fixed")
   public void everySubscriptionMustReceiveEveryPublishEvent() {
     final Subscription minerSubscriptionOne = minerWebSocket.subscribe();
     final Subscription minerSubscriptionTwo = minerWebSocket.subscribe();
@@ -167,8 +170,12 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     final Subscription archiveSubscriptionTwo = archiveWebSocket.subscribe();
     final Subscription archiveSubscriptionThree = archiveWebSocket.subscribe();
 
+    System.out.println("Subscribed to miner and archive nodes");
+
     final Hash eventOne = minerNode.execute(accountTransactions.createTransfer(accountOne, 10));
+    System.out.println("Event one created: " + eventOne);
     final Hash eventTwo = minerNode.execute(accountTransactions.createTransfer(accountOne, 5));
+    System.out.println("Event two created: " + eventTwo);
     cluster.verify(accountOne.balanceEquals(10 + 5));
 
     minerWebSocket.verifyTotalEventsReceived(4);
@@ -190,5 +197,7 @@ public class NewPendingTransactionAcceptanceTest extends AcceptanceTestBase {
     archiveWebSocket.unsubscribe(archiveSubscriptionOne);
     archiveWebSocket.unsubscribe(archiveSubscriptionTwo);
     archiveWebSocket.unsubscribe(archiveSubscriptionThree);
+
+    System.out.println("Unsubscribed from miner and archive nodes");
   }
 }
