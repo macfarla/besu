@@ -73,7 +73,7 @@ How to become a maintainer:
 
 The requirement to be able to be proposed as a maintainer is:
 
-- 5 significant changes on code have been authored in this repos by the proposed maintainer and accepted (merged PRs).
+- 5 significant changes on code have been authored in this repository by the proposed maintainer and accepted (merged PRs).
   
 ### Maintainers approval process
 
@@ -94,7 +94,7 @@ The following steps must occur for a contributor to be "upgraded" as a maintaine
 - No veto raised by another maintainer within the voting timeframe.
   - All vetoes must be accompanied by a public explanation as a comment in the
     proposal PR.
-  - The explanation of the veto must be reasonable and follow the [Besu code of conduct](https://wiki.hyperledger.org/display/BESU/Code+of+Conduct).
+  - The explanation of the veto must be reasonable and follow the [Besu code of conduct](./CODE_OF_CONDUCT.md).
   - A veto can be retracted, in that case the voting timeframe is reset and all approvals are removed.
   - It is bad form to veto, retract, and veto again.
   
@@ -141,7 +141,7 @@ I propose to add [maintainer github handle] as a Besu project maintainer.
 
 - [list significant achievements]
 
-Here are [their past contributions on Besu project](https://github.com/hyperledger/besu/commits?author=[user github handle]).
+Here are [their past contributions to Besu](https://github.com/hyperledger/besu/commits?author=[user github handle]).
 
 Voting ends two weeks from today.
 
