@@ -1,6 +1,6 @@
 # Tracing
 
-Hyperledger Besu integrates with the [open-telemetry](https://opentelemetry.io/) project to integrate tracing reporting.
+Besu integrates with the [open-telemetry](https://opentelemetry.io/) project to integrate tracing reporting.
 
 This allows reporting all JSON-RPC traffic as traces.
 

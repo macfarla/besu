@@ -1,4 +1,4 @@
-# Contributing to Hyperledger Besu
+# Contributing to Besu
 ## :tada: Thanks for taking the time to contribute! :tada:
 
 Welcome to the Besu repository! The following links are a set of guidelines for contributing to this repo and its packages. These are mostly guidelines, not rules. Use your best judgement, and feel free to propose changes to this document in a pull request. Contributions come in the form of code submissions, writing documentation, raising issues, helping others in chat, and any other actions that help develop Besu.

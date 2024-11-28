@@ -1,6 +1,6 @@
 # Private Transactions Migration 
 
-Hyperledger Besu v1.4 implements a new data structure for private state storage that is not backwards compatible. 
+Besu v1.4 implements a new data structure for private state storage that is not backwards compatible. 
 A migration will be performed when starting v1.4 for the first time to reprocess existing private transactions 
 created using v1.3.5 or later and re-create the private state data in the v1.4 format. 
 
@@ -11,7 +11,7 @@ state storage when upgrading to v1.4. It is not possible to upgrade to v1.4 with
 
 ## Private transactions created using v1.3.4 or earlier 
 
-A critical issue for privacy users with private transactions created using Hyperledger Besu v1.3.4 
+A critical issue for privacy users with private transactions created using Besu v1.3.4 
 or earlier has been identified. If you have a network with private transactions created using v1.3.4 
 or earlier, please read the following and take the appropriate steps: 
 
@@ -21,7 +21,7 @@ https://wiki.hyperledger.org/display/BESU/Critical+Issue+for+Privacy+Users
 
 **Important** 
 
-As a precaution (that is, resyncing should not be required), ensure your Hyperledger Besu database is backed-up 
+As a precaution (that is, resyncing should not be required), ensure your Besu database is backed-up 
 or other Besu nodes in your network are available to resync from if the migration does not complete as expected.  
 
 We recommend that all nodes in a network do not upgrade and migrate at once. 
