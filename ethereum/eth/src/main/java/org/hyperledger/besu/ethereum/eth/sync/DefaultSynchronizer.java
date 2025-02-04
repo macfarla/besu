@@ -22,6 +22,7 @@ import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
+import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTaskExecutor;
 import org.hyperledger.besu.ethereum.eth.sync.checkpointsync.CheckpointDownloaderFactory;
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.FastSyncDownloader;
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.FastSyncState;
@@ -82,6 +83,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
       final WorldStateStorageCoordinator worldStateStorageCoordinator,
       final BlockBroadcaster blockBroadcaster,
       final EthContext ethContext,
+      final PeerTaskExecutor peerTaskExecutor,
       final SyncState syncState,
       final Path dataDirectory,
       final StorageProvider storageProvider,
@@ -97,6 +99,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     ChainHeadTracker.trackChainHeadForPeers(
         ethContext,
         protocolSchedule,
+        syncConfig,
         protocolContext.getBlockchain(),
         this::calculateTrailingPeerRequirements,
         metricsSystem);
@@ -134,6 +137,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
                     syncState,
                     metricsSystem,
                     terminationCondition,
+                    peerTaskExecutor,
                     syncDurationMetrics));
 
     if (SyncMode.FAST.equals(syncConfig.getSyncMode())) {
@@ -388,10 +392,12 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     return syncState.unsubscribeSyncStatus(listenerId);
   }
 
+  @Override
   public long subscribeInitialSync(final BesuEvents.InitialSyncCompletionListener listener) {
     return syncState.subscribeCompletionReached(listener);
   }
 
+  @Override
   public boolean unsubscribeInitialSync(final long listenerId) {
     return syncState.unsubscribeInitialConditionReached(listenerId);
   }

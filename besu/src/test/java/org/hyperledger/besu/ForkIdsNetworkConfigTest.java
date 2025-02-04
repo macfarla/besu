@@ -15,11 +15,12 @@
 package org.hyperledger.besu;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.cli.config.NetworkName;
-import org.hyperledger.besu.config.GenesisConfigFile;
+import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.consensus.merge.MergeProtocolSchedule;
 import org.hyperledger.besu.consensus.merge.PostMergeContext;
@@ -30,7 +31,7 @@ import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.chain.GenesisState;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.MilestoneStreamingProtocolSchedule;
-import org.hyperledger.besu.ethereum.core.MiningParameters;
+import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.forkid.ForkId;
 import org.hyperledger.besu.ethereum.forkid.ForkIdManager;
 import org.hyperledger.besu.ethereum.mainnet.DefaultProtocolSchedule;
@@ -46,20 +47,14 @@ import java.util.stream.Stream;
 import com.google.common.collect.Streams;
 import org.apache.tuweni.bytes.Bytes;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(Parameterized.class)
+@ExtendWith(MockitoExtension.class)
 public class ForkIdsNetworkConfigTest {
 
-  @Parameterized.Parameter public NetworkName chainName;
-
-  @Parameterized.Parameter(1)
-  public List<ForkId> expectedForkIds;
-
-  @Parameterized.Parameters(name = "{0}")
   public static Collection<Object[]> parameters() {
     return List.of(
         new Object[] {
@@ -138,10 +133,9 @@ public class ForkIdsNetworkConfigTest {
   @ParameterizedTest
   @MethodSource("parameters")
   public void testForkId(final NetworkName chainName, final List<ForkId> expectedForkIds) {
-    final GenesisConfigFile genesisConfigFile =
-        GenesisConfigFile.fromResource(chainName.getGenesisFile());
-    final MilestoneStreamingTransitionProtocolSchedule schedule = createSchedule(genesisConfigFile);
-    final GenesisState genesisState = GenesisState.fromConfig(genesisConfigFile, schedule);
+    final GenesisConfig genesisConfig = GenesisConfig.fromResource(chainName.getGenesisFile());
+    final MilestoneStreamingTransitionProtocolSchedule schedule = createSchedule(genesisConfig);
+    final GenesisState genesisState = GenesisState.fromConfig(genesisConfig, schedule);
     final Blockchain mockBlockchain = mock(Blockchain.class);
     final BlockHeader mockBlockHeader = mock(BlockHeader.class);
 
@@ -149,14 +143,14 @@ public class ForkIdsNetworkConfigTest {
 
     final AtomicLong blockNumber = new AtomicLong();
     when(mockBlockchain.getChainHeadHeader()).thenReturn(mockBlockHeader);
-    when(mockBlockHeader.getNumber()).thenAnswer(o -> blockNumber.get());
-    when(mockBlockHeader.getTimestamp()).thenAnswer(o -> blockNumber.get());
+    lenient().when(mockBlockHeader.getNumber()).thenAnswer(o -> blockNumber.get());
+    lenient().when(mockBlockHeader.getTimestamp()).thenAnswer(o -> blockNumber.get());
 
     final ForkIdManager forkIdManager =
         new ForkIdManager(
             mockBlockchain,
-            genesisConfigFile.getForkBlockNumbers(),
-            genesisConfigFile.getForkTimestamps(),
+            genesisConfig.getForkBlockNumbers(),
+            genesisConfig.getForkTimestamps(),
             false);
 
     final List<ForkId> actualForkIds =
@@ -172,14 +166,14 @@ public class ForkIdsNetworkConfigTest {
   }
 
   private static MilestoneStreamingTransitionProtocolSchedule createSchedule(
-      final GenesisConfigFile genesisConfigFile) {
-    final GenesisConfigOptions configOptions = genesisConfigFile.getConfigOptions();
+      final GenesisConfig genesisConfig) {
+    final GenesisConfigOptions configOptions = genesisConfig.getConfigOptions();
     MilestoneStreamingProtocolSchedule preMergeProtocolSchedule =
         new MilestoneStreamingProtocolSchedule(
             (DefaultProtocolSchedule)
                 MainnetProtocolSchedule.fromConfig(
                     configOptions,
-                    MiningParameters.MINING_DISABLED,
+                    MiningConfiguration.MINING_DISABLED,
                     new BadBlockManager(),
                     false,
                     new NoOpMetricsSystem()));
@@ -189,7 +183,7 @@ public class ForkIdsNetworkConfigTest {
                 MergeProtocolSchedule.create(
                     configOptions,
                     false,
-                    MiningParameters.MINING_DISABLED,
+                    MiningConfiguration.MINING_DISABLED,
                     new BadBlockManager(),
                     false,
                     new NoOpMetricsSystem()));

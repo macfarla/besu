@@ -88,6 +88,7 @@ public class BlockResult implements JsonRpcResult {
   private final String blobGasUsed;
   private final String excessBlobGas;
   private final String parentBeaconBlockRoot;
+  private final List<CallProcessingResult> callProcessingResults;
 
   public BlockResult(
       final BlockHeader header,
@@ -102,6 +103,18 @@ public class BlockResult implements JsonRpcResult {
       final BlockHeader header,
       final List<TransactionResult> transactions,
       final List<JsonNode> ommers,
+      final Difficulty totalDifficulty,
+      final int size,
+      final boolean includeCoinbase,
+      final Optional<List<Withdrawal>> withdrawals) {
+    this(header, transactions, ommers, null, totalDifficulty, size, includeCoinbase, withdrawals);
+  }
+
+  public BlockResult(
+      final BlockHeader header,
+      final List<TransactionResult> transactions,
+      final List<JsonNode> ommers,
+      final List<CallProcessingResult> callProcessingResults,
       final Difficulty totalDifficulty,
       final int size,
       final boolean includeCoinbase,
@@ -127,6 +140,7 @@ public class BlockResult implements JsonRpcResult {
     this.timestamp = Quantity.create(header.getTimestamp());
     this.ommers = ommers;
     this.transactions = transactions;
+    this.callProcessingResults = callProcessingResults;
     this.coinbase = includeCoinbase ? header.getCoinbase().toString() : null;
     this.withdrawalsRoot = header.getWithdrawalsRoot().map(Hash::toString).orElse(null);
     this.withdrawals =
@@ -274,5 +288,10 @@ public class BlockResult implements JsonRpcResult {
   @JsonGetter(value = "parentBeaconBlockRoot")
   public String getParentBeaconBlockRoot() {
     return parentBeaconBlockRoot;
+  }
+
+  @JsonGetter(value = "calls")
+  public List<CallProcessingResult> getTransactionProcessingResults() {
+    return callProcessingResults;
   }
 }

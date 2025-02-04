@@ -18,6 +18,7 @@ import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -45,6 +46,8 @@ import org.hyperledger.besu.ethereum.p2p.permissions.PeerPermissions.Action;
 import org.hyperledger.besu.ethereum.p2p.permissions.PeerPermissionsDenylist;
 import org.hyperledger.besu.plugin.data.EnodeURL;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -182,7 +185,7 @@ public class PeerDiscoveryAgentTest {
   }
 
   @Test
-  public void neighborsPacketLimited() {
+  public void neighborsPacketLimited() throws InterruptedException {
     // Start 20 agents with no bootstrap peers.
     final List<MockPeerDiscoveryAgent> otherAgents =
         helper.startDiscoveryAgents(20, Collections.emptyList());
@@ -192,8 +195,9 @@ public class PeerDiscoveryAgentTest {
             .map(Optional::get)
             .collect(Collectors.toList());
 
-    // Start another peer pointing to those 20 agents.
+    // Start another peer
     final MockPeerDiscoveryAgent agent = helper.startDiscoveryAgent(otherPeers);
+
     // We used to do a hasSize match but we had issues with duplicate peers getting added to the
     // list.  By moving to a contains we make sure that all the peers are loaded with tolerance for
     // duplicates.  If we fix the duplication problem we should use containsExactlyInAnyOrder to
@@ -222,7 +226,7 @@ public class PeerDiscoveryAgentTest {
     final List<IncomingPacket> incomingPackets =
         testAgent.getIncomingPackets().stream()
             .filter(p -> p.packet.getType().equals(PacketType.NEIGHBORS))
-            .collect(toList());
+            .toList();
     assertThat(incomingPackets.size()).isEqualTo(1);
     final IncomingPacket neighborsPacket = incomingPackets.get(0);
     assertThat(neighborsPacket.fromAgent).isEqualTo(agent);
@@ -895,6 +899,23 @@ public class PeerDiscoveryAgentTest {
     assertThat(PeerDiscoveryAgent.deriveHost(source, mockBroadcast)).isEqualTo(sourceHost);
     // assert that a well-formed routable address in the ping packet data is used
     assertThat(PeerDiscoveryAgent.deriveHost(source, mockWellFormed)).isEqualTo(routableHost);
+  }
+
+  @Test
+  void testFromEnodeWithDiscoveryDisabled() throws UnknownHostException {
+    EnodeURL enodeWithNoDiscovery = mock(EnodeURL.class);
+    when(enodeWithNoDiscovery.getDiscoveryPort()).thenReturn(Optional.empty());
+    when(enodeWithNoDiscovery.getListeningPort()).thenReturn(Optional.of(8545));
+
+    when(enodeWithNoDiscovery.getIp()).thenReturn(InetAddress.getLoopbackAddress());
+
+    Endpoint result = Endpoint.fromEnode(enodeWithNoDiscovery);
+
+    assertEquals("127.0.0.1", result.getHost());
+
+    assertEquals(EnodeURLImpl.DEFAULT_LISTENING_PORT, result.getUdpPort());
+
+    assertEquals(Optional.empty(), result.getTcpPort());
   }
 
   protected void bondViaIncomingPing(

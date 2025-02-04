@@ -14,7 +14,7 @@
  */
 package org.hyperledger.besu.ethereum.p2p.discovery.dns;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 
 import java.security.Security;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,7 +26,6 @@ import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -70,10 +69,24 @@ class DNSDaemonTest {
                 testContext.failNow(
                     "Expecting 115 records in first pass but got: " + records.size());
               }
+              records.forEach(
+                  enr -> {
+                    try {
+                      // make sure enode url can be built from record
+                      EnodeURLImpl.builder()
+                          .ipAddress(enr.ip())
+                          .nodeId(enr.publicKey())
+                          .discoveryPort(enr.udp())
+                          .listeningPort(enr.tcp())
+                          .build();
+                    } catch (final Exception e) {
+                      testContext.failNow(e);
+                    }
+                  });
               checkpoint.flag();
             },
             0,
-            0,
+            1L,
             0,
             "localhost:" + mockDnsServerVerticle.port());
 
@@ -135,11 +148,5 @@ class DNSDaemonTest {
             .setThreadingModel(ThreadingModel.VIRTUAL_THREAD)
             .setWorkerPoolSize(1);
     vertx.deployVerticle(dnsDaemon, options);
-  }
-
-  @AfterEach
-  @DisplayName("Check that the vertx worker verticle is still there")
-  void lastChecks(final Vertx vertx) {
-    assertThat(vertx.deploymentIDs()).isNotEmpty().hasSize(2);
   }
 }

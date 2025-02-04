@@ -34,14 +34,14 @@ import org.hyperledger.besu.chainexport.RlpBlockExporter;
 import org.hyperledger.besu.chainimport.JsonBlockImporter;
 import org.hyperledger.besu.chainimport.RlpBlockImporter;
 import org.hyperledger.besu.cli.config.EthNetworkConfig;
+import org.hyperledger.besu.cli.options.EthProtocolOptions;
+import org.hyperledger.besu.cli.options.EthstatsOptions;
 import org.hyperledger.besu.cli.options.MiningOptions;
+import org.hyperledger.besu.cli.options.NetworkingOptions;
+import org.hyperledger.besu.cli.options.P2PDiscoveryOptions;
+import org.hyperledger.besu.cli.options.SynchronizerOptions;
 import org.hyperledger.besu.cli.options.TransactionPoolOptions;
-import org.hyperledger.besu.cli.options.stable.DataStorageOptions;
-import org.hyperledger.besu.cli.options.stable.EthstatsOptions;
-import org.hyperledger.besu.cli.options.unstable.EthProtocolOptions;
-import org.hyperledger.besu.cli.options.unstable.MetricsCLIOptions;
-import org.hyperledger.besu.cli.options.unstable.NetworkingOptions;
-import org.hyperledger.besu.cli.options.unstable.SynchronizerOptions;
+import org.hyperledger.besu.cli.options.storage.DataStorageOptions;
 import org.hyperledger.besu.components.BesuComponent;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.controller.BesuController;
@@ -114,6 +114,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.json.JsonObject;
+import jakarta.validation.constraints.NotEmpty;
 import org.apache.commons.net.util.SubnetUtils.SubnetInfo;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.tuweni.bytes.Bytes;
@@ -138,15 +139,18 @@ public abstract class CommandTestAbstract {
   private static final Logger TEST_LOGGER = LoggerFactory.getLogger(CommandTestAbstract.class);
 
   protected static final int POA_BLOCK_PERIOD_SECONDS = 5;
+  protected static final int POA_EMPTY_BLOCK_PERIOD_SECONDS = 50;
   protected static final JsonObject VALID_GENESIS_QBFT_POST_LONDON =
       (new JsonObject())
           .put(
               "config",
               new JsonObject()
                   .put("londonBlock", 0)
+                  .put("qbft", new JsonObject().put("blockperiodseconds", POA_BLOCK_PERIOD_SECONDS))
                   .put(
                       "qbft",
-                      new JsonObject().put("blockperiodseconds", POA_BLOCK_PERIOD_SECONDS)));
+                      new JsonObject()
+                          .put("xemptyblockperiodseconds", POA_EMPTY_BLOCK_PERIOD_SECONDS)));
   protected static final JsonObject VALID_GENESIS_IBFT2_POST_LONDON =
       (new JsonObject())
           .put(
@@ -293,6 +297,7 @@ public abstract class CommandTestAbstract {
     when(mockControllerBuilder.cacheLastBlocks(any())).thenReturn(mockControllerBuilder);
     when(mockControllerBuilder.genesisStateHashCacheEnabled(any()))
         .thenReturn(mockControllerBuilder);
+    when(mockControllerBuilder.apiConfiguration(any())).thenReturn(mockControllerBuilder);
 
     when(mockControllerBuilder.build()).thenReturn(mockController);
     lenient().when(mockController.getProtocolManager()).thenReturn(mockEthProtocolManager);
@@ -564,8 +569,9 @@ public abstract class CommandTestAbstract {
     }
 
     @Override
-    protected void validateP2PInterface(final String p2pInterface) {
+    protected P2PDiscoveryOptions.NetworkInterfaceChecker getNetworkInterfaceChecker() {
       // For testing, don't actually query for networking interfaces to validate this option
+      return (networkInterface) -> true;
     }
 
     @Override
@@ -607,10 +613,6 @@ public abstract class CommandTestAbstract {
       return dataStorageOptions;
     }
 
-    public MetricsCLIOptions getMetricsCLIOptions() {
-      return unstableMetricsCLIOptions;
-    }
-
     public void close() {
       if (vertx != null) {
         final AtomicBoolean closed = new AtomicBoolean(false);
@@ -623,6 +625,7 @@ public abstract class CommandTestAbstract {
   @CommandLine.Command
   public static class TestBesuCommandWithRequiredOption extends TestBesuCommand {
 
+    @NotEmpty
     @CommandLine.Option(
         names = {"--accept-terms-and-conditions"},
         description = "You must explicitly accept terms and conditions",

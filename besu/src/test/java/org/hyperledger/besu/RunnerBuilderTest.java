@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.cli.config.EthNetworkConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
-import org.hyperledger.besu.config.MergeConfigOptions;
+import org.hyperledger.besu.config.MergeConfiguration;
 import org.hyperledger.besu.consensus.common.bft.BftEventQueue;
 import org.hyperledger.besu.consensus.common.bft.network.PeerConnectionTracker;
 import org.hyperledger.besu.consensus.common.bft.protocol.BftProtocolManager;
@@ -49,7 +49,7 @@ import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockDataGenerator;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
-import org.hyperledger.besu.ethereum.core.MiningParameters;
+import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
@@ -128,7 +128,7 @@ public final class RunnerBuilderTest {
     when(besuController.getProtocolContext()).thenReturn(protocolContext);
     when(besuController.getProtocolSchedule()).thenReturn(protocolSchedule);
     when(besuController.getNodeKey()).thenReturn(nodeKey);
-    when(besuController.getMiningParameters()).thenReturn(mock(MiningParameters.class));
+    when(besuController.getMiningParameters()).thenReturn(mock(MiningConfiguration.class));
     when(besuController.getPrivacyParameters()).thenReturn(mock(PrivacyParameters.class));
     when(besuController.getTransactionPool())
         .thenReturn(mock(TransactionPool.class, RETURNS_DEEP_STUBS));
@@ -250,7 +250,7 @@ public final class RunnerBuilderTest {
     engine.setEnabled(true);
     final EthNetworkConfig mockMainnet = mock(EthNetworkConfig.class);
     when(mockMainnet.networkId()).thenReturn(BigInteger.ONE);
-    MergeConfigOptions.setMergeEnabled(true);
+    MergeConfiguration.setMergeEnabled(true);
     when(besuController.getMiningCoordinator()).thenReturn(mock(MergeMiningCoordinator.class));
 
     final Runner runner =
@@ -292,7 +292,7 @@ public final class RunnerBuilderTest {
     wsRpc.setEnabled(true);
     final EthNetworkConfig mockMainnet = mock(EthNetworkConfig.class);
     when(mockMainnet.networkId()).thenReturn(BigInteger.ONE);
-    MergeConfigOptions.setMergeEnabled(true);
+    MergeConfiguration.setMergeEnabled(true);
     when(besuController.getMiningCoordinator()).thenReturn(mock(MergeMiningCoordinator.class));
     final JsonRpcConfiguration engineConf = JsonRpcConfiguration.createEngineDefault();
     engineConf.setEnabled(true);
@@ -335,7 +335,7 @@ public final class RunnerBuilderTest {
     wsRpc.setEnabled(true);
     final EthNetworkConfig mockMainnet = mock(EthNetworkConfig.class);
     when(mockMainnet.networkId()).thenReturn(BigInteger.ONE);
-    MergeConfigOptions.setMergeEnabled(true);
+    MergeConfiguration.setMergeEnabled(true);
     when(besuController.getMiningCoordinator()).thenReturn(mock(MergeMiningCoordinator.class));
     final JsonRpcConfiguration engineConf = JsonRpcConfiguration.createEngineDefault();
     engineConf.setEnabled(true);
@@ -383,7 +383,7 @@ public final class RunnerBuilderTest {
     defaultWebSockConfig.setEnabled(true);
     final EthNetworkConfig mockMainnet = mock(EthNetworkConfig.class);
     when(mockMainnet.networkId()).thenReturn(BigInteger.ONE);
-    MergeConfigOptions.setMergeEnabled(true);
+    MergeConfiguration.setMergeEnabled(true);
 
     final Runner runner =
         new RunnerBuilder()

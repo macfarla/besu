@@ -20,9 +20,9 @@ import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.core.ProcessableBlockHeader;
 import org.hyperledger.besu.evm.account.Account;
+import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.evm.code.CodeV0;
 import org.hyperledger.besu.evm.frame.MessageFrame;
-import org.hyperledger.besu.evm.operation.BlockHashOperation;
 import org.hyperledger.besu.evm.processor.AbstractMessageProcessor;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -56,20 +56,21 @@ public class SystemCallProcessor {
    * @param blockHeader the current block header.
    * @param operationTracer the operation tracer for tracing EVM operations.
    * @param blockHashLookup the block hash lookup function.
-   * @return the output data from the call
+   * @return the output data from the call. If no code exists at the callAddress then an empty Bytes
+   *     is returned.
    */
   public Bytes process(
       final Address callAddress,
       final WorldUpdater worldState,
       final ProcessableBlockHeader blockHeader,
       final OperationTracer operationTracer,
-      final BlockHashOperation.BlockHashLookup blockHashLookup) {
+      final BlockHashLookup blockHashLookup) {
 
     // if no code exists at CALL_ADDRESS, the call must fail silently
     final Account maybeContract = worldState.get(callAddress);
     if (maybeContract == null) {
       LOG.trace("System call address not found {}", callAddress);
-      return null;
+      return Bytes.EMPTY;
     }
 
     final AbstractMessageProcessor messageProcessor =
@@ -108,7 +109,7 @@ public class SystemCallProcessor {
       final Address callAddress,
       final WorldUpdater worldUpdater,
       final ProcessableBlockHeader blockHeader,
-      final BlockHashOperation.BlockHashLookup blockHashLookup) {
+      final BlockHashLookup blockHashLookup) {
 
     final Optional<Account> maybeContract = Optional.ofNullable(worldUpdater.get(callAddress));
     final AbstractMessageProcessor processor =

@@ -23,7 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.config.BftConfigOptions;
-import org.hyperledger.besu.config.GenesisConfigFile;
+import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.consensus.common.ForkSpec;
 import org.hyperledger.besu.consensus.common.ForksSchedule;
@@ -42,9 +42,9 @@ import org.hyperledger.besu.ethereum.core.AddressHelpers;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockHeaderTestFixture;
-import org.hyperledger.besu.ethereum.core.ImmutableMiningParameters;
-import org.hyperledger.besu.ethereum.core.ImmutableMiningParameters.MutableInitValues;
-import org.hyperledger.besu.ethereum.core.MiningParameters;
+import org.hyperledger.besu.ethereum.core.ImmutableMiningConfiguration;
+import org.hyperledger.besu.ethereum.core.ImmutableMiningConfiguration.MutableInitValues;
+import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.transactions.BlobCache;
@@ -110,8 +110,7 @@ public class BftBlockCreatorTest {
           }
         };
     final GenesisConfigOptions configOptions =
-        GenesisConfigFile.fromConfig("{\"config\": {\"spuriousDragonBlock\":0}}")
-            .getConfigOptions();
+        GenesisConfig.fromConfig("{\"config\": {\"spuriousDragonBlock\":0}}").getConfigOptions();
     final ForksSchedule<BftConfigOptions> forksSchedule =
         new ForksSchedule<>(List.of(new ForkSpec<>(0, configOptions.getBftConfigOptions())));
     final ProtocolSchedule protocolSchedule =
@@ -122,7 +121,7 @@ public class BftBlockCreatorTest {
             false,
             bftExtraDataEncoder,
             EvmConfiguration.DEFAULT,
-            MiningParameters.MINING_DISABLED,
+            MiningConfiguration.MINING_DISABLED,
             new BadBlockManager(),
             false,
             new NoOpMetricsSystem());
@@ -159,8 +158,8 @@ public class BftBlockCreatorTest {
 
     transactionPool.setEnabled();
 
-    final MiningParameters miningParameters =
-        ImmutableMiningParameters.builder()
+    final MiningConfiguration miningConfiguration =
+        ImmutableMiningConfiguration.builder()
             .mutableInitValues(
                 MutableInitValues.builder()
                     .extraData(
@@ -178,7 +177,7 @@ public class BftBlockCreatorTest {
 
     final BftBlockCreator blockCreator =
         new BftBlockCreator(
-            miningParameters,
+            miningConfiguration,
             forksSchedule,
             initialValidatorList.get(0),
             parent ->

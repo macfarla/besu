@@ -17,7 +17,7 @@ package org.hyperledger.besu.ethereum.eth.transactions;
 import static org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration.Implementation.LAYERED;
 
 import org.hyperledger.besu.ethereum.ProtocolContext;
-import org.hyperledger.besu.ethereum.core.MiningParameters;
+import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.manager.EthScheduler;
 import org.hyperledger.besu.ethereum.eth.messages.EthPV62;
@@ -56,7 +56,8 @@ public class TransactionPoolFactory {
       final SyncState syncState,
       final TransactionPoolConfiguration transactionPoolConfiguration,
       final BlobCache blobCache,
-      final MiningParameters miningParameters) {
+      final MiningConfiguration miningConfiguration,
+      final boolean isPeerTaskSystemEnabled) {
 
     final TransactionPoolMetrics metrics = new TransactionPoolMetrics(metricsSystem);
 
@@ -80,7 +81,8 @@ public class TransactionPoolFactory {
         transactionsMessageSender,
         newPooledTransactionHashesMessageSender,
         blobCache,
-        miningParameters);
+        miningConfiguration,
+        isPeerTaskSystemEnabled);
   }
 
   static TransactionPool createTransactionPool(
@@ -95,7 +97,8 @@ public class TransactionPoolFactory {
       final TransactionsMessageSender transactionsMessageSender,
       final NewPooledTransactionHashesMessageSender newPooledTransactionHashesMessageSender,
       final BlobCache blobCache,
-      final MiningParameters miningParameters) {
+      final MiningConfiguration miningConfiguration,
+      final boolean isPeerTaskSystemEnabled) {
 
     final TransactionPool transactionPool =
         new TransactionPool(
@@ -108,7 +111,7 @@ public class TransactionPoolFactory {
                     metrics,
                     transactionPoolConfiguration,
                     blobCache,
-                    miningParameters),
+                    miningConfiguration),
             protocolSchedule,
             protocolContext,
             new TransactionBroadcaster(
@@ -135,7 +138,8 @@ public class TransactionPoolFactory {
                 transactionPool,
                 transactionPoolConfiguration,
                 ethContext,
-                metrics),
+                metrics,
+                isPeerTaskSystemEnabled),
             transactionPoolConfiguration.getUnstable().getTxMessageKeepAliveSeconds());
 
     subscribeTransactionHandlers(
@@ -241,7 +245,7 @@ public class TransactionPoolFactory {
       final TransactionPoolMetrics metrics,
       final TransactionPoolConfiguration transactionPoolConfiguration,
       final BlobCache blobCache,
-      final MiningParameters miningParameters) {
+      final MiningConfiguration miningConfiguration) {
 
     boolean isFeeMarketImplementBaseFee =
         protocolSchedule.anyMatch(
@@ -256,7 +260,7 @@ public class TransactionPoolFactory {
           transactionPoolConfiguration,
           isFeeMarketImplementBaseFee,
           blobCache,
-          miningParameters);
+          miningConfiguration);
     } else {
       return createPendingTransactionSorter(
           protocolContext,
@@ -296,7 +300,7 @@ public class TransactionPoolFactory {
       final TransactionPoolConfiguration transactionPoolConfiguration,
       final boolean isFeeMarketImplementBaseFee,
       final BlobCache blobCache,
-      final MiningParameters miningParameters) {
+      final MiningConfiguration miningConfiguration) {
 
     final TransactionPoolReplacementHandler transactionReplacementHandler =
         new TransactionPoolReplacementHandler(
@@ -345,7 +349,7 @@ public class TransactionPoolFactory {
               transactionReplacementTester,
               feeMarket,
               blobCache,
-              miningParameters);
+              miningConfiguration);
     } else {
       pendingTransactionsSorter =
           new GasPricePrioritizedTransactions(
@@ -355,7 +359,7 @@ public class TransactionPoolFactory {
               metrics,
               transactionReplacementTester,
               blobCache,
-              miningParameters);
+              miningConfiguration);
     }
 
     return new LayeredPendingTransactions(
