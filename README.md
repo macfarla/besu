@@ -8,7 +8,7 @@
 
 [Download](https://github.com/hyperledger/besu/releases)
 
-Besu is an Apache 2.0 licensed, MainNet compatible, Ethereum client written in Java.
+Besu is an Apache 2.0 licensed, Mainnet compatible, Ethereum client written in Java.
 
 ## Useful Links
 
