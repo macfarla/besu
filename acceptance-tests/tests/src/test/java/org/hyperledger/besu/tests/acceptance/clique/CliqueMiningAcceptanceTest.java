@@ -32,6 +32,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.web3j.protocol.core.DefaultBlockParameter;
 
+@Disabled("flaky see https://github.com/hyperledger/besu/issues/8240")
 public class CliqueMiningAcceptanceTest extends AcceptanceTestBase {
 
   @Test
