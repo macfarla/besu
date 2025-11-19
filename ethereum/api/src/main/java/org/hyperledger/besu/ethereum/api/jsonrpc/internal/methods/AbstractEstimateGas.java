@@ -80,7 +80,8 @@ public abstract class AbstractEstimateGas extends AbstractBlockParameterMethod {
     final var pendingBlockHeader = transactionSimulator.simulatePendingBlockHeader();
     final var minTxCost = getBlockchainQueries().getMinimumTransactionCost(pendingBlockHeader);
     final var gasLimitUpperBound = calculateGasLimitUpperBound(callParameter, pendingBlockHeader);
-    if (gasLimitUpperBound < minTxCost) {
+    final boolean isStrict = callParameter.getStrict().orElse(Boolean.FALSE);
+    if (isStrict && gasLimitUpperBound < minTxCost) {
       return errorResponse(requestContext, RpcErrorType.TRANSACTION_UPFRONT_COST_EXCEEDS_BALANCE);
     }
     final TransactionSimulationFunction simulationFunction =
@@ -116,7 +117,8 @@ public abstract class AbstractEstimateGas extends AbstractBlockParameterMethod {
     final var maybeStateOverrides = getAddressStateOverrideMap(requestContext);
     final var minTxCost = getBlockchainQueries().getMinimumTransactionCost(blockHeader);
     final var gasLimitUpperBound = calculateGasLimitUpperBound(callParameter, blockHeader);
-    if (gasLimitUpperBound < minTxCost) {
+    final boolean isStrict = callParameter.getStrict().orElse(Boolean.FALSE);
+    if (isStrict && gasLimitUpperBound < minTxCost) {
       return errorResponse(requestContext, RpcErrorType.TRANSACTION_UPFRONT_COST_EXCEEDS_BALANCE);
     }
     final TransactionSimulationFunction simulationFunction =
@@ -195,7 +197,7 @@ public abstract class AbstractEstimateGas extends AbstractBlockParameterMethod {
 
   protected static TransactionValidationParams getTransactionValidationParams(
       final CallParameter callParams) {
-    final boolean isAllowExceedingBalance = !callParams.getStrict().orElse(Boolean.TRUE);
+    final boolean isAllowExceedingBalance = !callParams.getStrict().orElse(Boolean.FALSE);
 
     return isAllowExceedingBalance
         ? TransactionValidationParams.transactionSimulatorAllowExceedingBalanceAndFutureNonce()
@@ -237,7 +239,9 @@ public abstract class AbstractEstimateGas extends AbstractBlockParameterMethod {
             getBlockchainQueries().getTransactionGasLimitCap(blockHeader),
             blockHeader.getGasLimit());
 
-    if (callParameters.getSender().isPresent() && callParameters.getStrict().orElse(Boolean.TRUE)) {
+    // Apply balance-based gas limit constraints when in strict mode (default)
+    if (callParameters.getSender().isPresent()
+        && callParameters.getStrict().orElse(Boolean.FALSE)) {
       final var sender = callParameters.getSender().get();
       final var maxGasPrice = calculateTxMaxGasPrice(callParameters);
       if (!maxGasPrice.equals(Wei.ZERO)) {
