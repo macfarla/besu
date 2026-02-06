@@ -18,6 +18,7 @@ import org.hyperledger.besu.datatypes.AccountValue;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
+import org.hyperledger.besu.ethereum.mainnet.ExecutionStatsHolder;
 import org.hyperledger.besu.ethereum.rlp.BytesValueRLPOutput;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.PathBasedWorldView;
 import org.hyperledger.besu.evm.Code;
@@ -198,6 +199,8 @@ public abstract class PathBasedAccount implements MutableAccount, AccountValue {
     // cache hit, overwrite code and return it
     if (cachedCode != null) {
       code = cachedCode;
+      // Track code cache hit for cross-client execution metrics
+      ExecutionStatsHolder.getOptional().ifPresent(stats -> stats.incrementCodeCacheHits());
       return code;
     }
 
@@ -205,6 +208,8 @@ public abstract class PathBasedAccount implements MutableAccount, AccountValue {
     final Bytes byteCode = context.getCode(address, codeHash).orElse(Bytes.EMPTY);
     code = new Code(byteCode, codeHash);
     Optional.ofNullable(codeCache).ifPresent(c -> c.put(codeHash, code));
+    // Track code cache miss for cross-client execution metrics
+    ExecutionStatsHolder.getOptional().ifPresent(stats -> stats.incrementCodeCacheMisses());
 
     return code;
   }

@@ -20,6 +20,7 @@ import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.MutableWorldState;
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
+import org.hyperledger.besu.metrics.prometheus.MetricsConfiguration;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
 import java.util.List;
@@ -66,7 +67,30 @@ public class MainnetBlockProcessor extends AbstractBlockProcessor {
         skipZeroBlockRewards,
         protocolSchedule,
         balConfiguration,
-        metricsSystem);
+        metricsSystem,
+        MetricsConfiguration.builder().build());
+  }
+
+  public MainnetBlockProcessor(
+      final MainnetTransactionProcessor transactionProcessor,
+      final AbstractBlockProcessor.TransactionReceiptFactory transactionReceiptFactory,
+      final Wei blockReward,
+      final MiningBeneficiaryCalculator miningBeneficiaryCalculator,
+      final boolean skipZeroBlockRewards,
+      final ProtocolSchedule protocolSchedule,
+      final BalConfiguration balConfiguration,
+      final MetricsSystem metricsSystem,
+      final MetricsConfiguration metricsConfiguration) {
+    super(
+        transactionProcessor,
+        transactionReceiptFactory,
+        blockReward,
+        miningBeneficiaryCalculator,
+        skipZeroBlockRewards,
+        protocolSchedule,
+        balConfiguration,
+        metricsSystem,
+        metricsConfiguration);
   }
 
   @Override

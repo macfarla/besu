@@ -413,9 +413,12 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
         storageToUpdate.remove(deletedAddress);
       }
       accountValue.setUpdated(null);
+      // Track account write for cross-client execution metrics (account deleted)
+      // TODO: Track account write via ExecutionMetricsTracer
     }
 
-    getUpdatedAccounts().parallelStream()
+    // Note: Use sequential stream, not parallel, because metrics tracking uses ThreadLocal
+    getUpdatedAccounts().stream()
         .forEach(
             tracked -> {
               final Address updatedAddress = tracked.getAddress();
@@ -475,6 +478,9 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                 pendingStorageUpdates.clear();
               }
 
+              // Track account write for cross-client execution metrics (account modified)
+              // TODO: Track account write via ExecutionMetricsTracer
+
               // parallel stream here may cause database corruption
               updatedAccount
                   .getUpdatedStorage()
@@ -496,6 +502,8 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                         } else {
                           pendingValue.setUpdated(value);
                         }
+                        // Track storage write for cross-client execution metrics
+                        // TODO: Track storage write via ExecutionMetricsTracer
                       });
 
               updatedAccount.getUpdatedStorage().clear();

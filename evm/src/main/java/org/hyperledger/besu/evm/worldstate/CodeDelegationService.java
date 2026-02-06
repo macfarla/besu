@@ -20,6 +20,9 @@ import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.hasCodeDe
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.account.MutableAccount;
+import org.hyperledger.besu.evm.tracing.ExecutionMetricsTracer;
+
+import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
 
@@ -39,13 +42,30 @@ public class CodeDelegationService {
    */
   public void processCodeDelegation(
       final MutableAccount account, final Address codeDelegationAddress) {
+    processCodeDelegation(account, codeDelegationAddress, Optional.empty());
+  }
+
+  /**
+   * Process the delegated code authorization. It will set the code to 0x ef0100 + delegated code
+   * address. If the address is 0, it will set the code to empty.
+   *
+   * @param account the account to which the delegated code is added.
+   * @param codeDelegationAddress the address of the target of the authorization.
+   * @param executionMetricsTracer the ExecutionMetricsTracer to track operations with.
+   */
+  public void processCodeDelegation(
+      final MutableAccount account,
+      final Address codeDelegationAddress,
+      final Optional<ExecutionMetricsTracer> executionMetricsTracer) {
     // code delegation to zero address removes any delegated code
     if (codeDelegationAddress.equals(Address.ZERO)) {
       account.setCode(Bytes.EMPTY);
+      executionMetricsTracer.ifPresent(ExecutionMetricsTracer::onEip7702DelegationCleared);
       return;
     }
 
     account.setCode(Bytes.concatenate(CODE_DELEGATION_PREFIX, codeDelegationAddress.getBytes()));
+    executionMetricsTracer.ifPresent(ExecutionMetricsTracer::onEip7702DelegationSet);
   }
 
   /**

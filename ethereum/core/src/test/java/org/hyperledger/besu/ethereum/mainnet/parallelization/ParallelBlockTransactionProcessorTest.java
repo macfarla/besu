@@ -42,6 +42,7 @@ import org.hyperledger.besu.ethereum.mainnet.ValidationResult;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList.BlockAccessListBuilder;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.PartialBlockAccessView;
+import org.hyperledger.besu.ethereum.mainnet.systemcall.BlockProcessingContext;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.cache.CodeCache;
@@ -110,14 +111,18 @@ class ParallelBlockTransactionProcessorTest {
       final ProcessorVariant variant,
       final MainnetTransactionProcessor transactionProcessor,
       final TransactionCollisionDetector collisionDetector,
-      final BlockAccessList blockAccessList) {
+      final BlockAccessList blockAccessList,
+      final BlockProcessingContext blockProcessingContext) {
 
     return switch (variant) {
       case PARALLELIZED ->
           new ParallelizedConcurrentTransactionProcessor(transactionProcessor, collisionDetector);
       case BAL ->
           new BalConcurrentTransactionProcessor(
-              transactionProcessor, blockAccessList, BalConfiguration.DEFAULT);
+              transactionProcessor,
+              blockAccessList,
+              BalConfiguration.DEFAULT,
+              blockProcessingContext);
     };
   }
 
@@ -173,8 +178,14 @@ class ParallelBlockTransactionProcessorTest {
     final BlockAccessList blockAccessList = mockEmptyBlockAccessList();
     final Transaction transaction = mockTransaction();
     final TestEnvironment env = createTestEnvironment();
+    final BlockProcessingContext blockProcessingContext = mock(BlockProcessingContext.class);
     final ParallelBlockTransactionProcessor processor =
-        createProcessor(variant, transactionProcessor, collisionDetector, blockAccessList);
+        createProcessor(
+            variant,
+            transactionProcessor,
+            collisionDetector,
+            blockAccessList,
+            blockProcessingContext);
 
     if (variant == ProcessorVariant.PARALLELIZED) {
       when(collisionDetector.hasCollision(any(), any(), any(), any())).thenReturn(false);
@@ -507,9 +518,13 @@ class ParallelBlockTransactionProcessorTest {
                   ValidationResult.valid());
             });
 
+    final BlockProcessingContext blockProcessingContext = mock(BlockProcessingContext.class);
     final BalConcurrentTransactionProcessor processor =
         new BalConcurrentTransactionProcessor(
-            transactionProcessor, blockAccessList, BalConfiguration.DEFAULT);
+            transactionProcessor,
+            blockAccessList,
+            BalConfiguration.DEFAULT,
+            blockProcessingContext);
 
     final Transaction tx0 = mockTransaction();
     final Transaction tx1 = mockTransaction();
