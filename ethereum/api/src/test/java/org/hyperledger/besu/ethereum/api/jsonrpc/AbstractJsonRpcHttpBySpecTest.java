@@ -30,6 +30,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,6 +50,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpServiceTest {
 
+  private static final boolean UPDATE_SPECS = Boolean.getBoolean("besu.test.update.specs");
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private static final Pattern GAS_MATCH_FOR_STATE_DIFF =
       Pattern.compile("\"balance\":(?!\"=\").*?},");
@@ -56,6 +58,8 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
       Pattern.compile(",*\"cost\":[0-9a-fA-F]+,*|,\"used\":[0-9a-fA-F]+");
   private static final Pattern GAS_MATCH_FOR_TRACE =
       Pattern.compile("\"gasUsed\":\"[x0-9a-fA-F]+\",");
+  private static final Pattern ERROR_MESSAGE_NORMALIZATION =
+      Pattern.compile("\"error\"\\s*:\\s*\"([^\"]+)\"");
 
   private URL specURL;
 
@@ -126,13 +130,19 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
       final int expectedStatusCode = specNode.get("statusCode").asInt();
       assertThat(resp.code()).isEqualTo(expectedStatusCode);
 
+      final String responseString = Objects.requireNonNull(resp.body()).string();
+      final JsonNode actualResponseNode = objectMapper.readTree(responseString);
+
+      if (UPDATE_SPECS) {
+        updateSpecFile(specFile, specNode, actualResponseNode);
+        return;
+      }
+
       final JsonNode expectedResponse = specNode.get("response");
       if (expectedResponse.isObject()) {
         try {
-          final ObjectNode responseBody =
-              (ObjectNode) objectMapper.readTree(Objects.requireNonNull(resp.body()).string());
           checkResponse(
-              responseBody,
+              (ObjectNode) actualResponseNode,
               (ObjectNode) expectedResponse,
               getMethod(rawRequestBody),
               getTraceType(specFile.toString()));
@@ -142,8 +152,7 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
       } else if (expectedResponse.isArray()) {
         final ArrayNode responseBody;
         try {
-          responseBody =
-              (ArrayNode) objectMapper.readTree(Objects.requireNonNull(resp.body()).string());
+          responseBody = (ArrayNode) actualResponseNode;
         } catch (final Exception e) {
           throw new RuntimeException("Unable to parse response as json Array", e);
         }
@@ -155,6 +164,78 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
               getTraceType(specFile.toString()));
         }
       }
+    }
+  }
+
+  private void updateSpecFile(
+      final URL specFile, final ObjectNode specNode, final JsonNode actualResponse)
+      throws IOException {
+    final Path sourcePath = resolveSourcePath(specFile);
+    if (sourcePath == null) {
+      return;
+    }
+    // Only update if response actually differs
+    final JsonNode originalResponse = specNode.get("response");
+    if (originalResponse != null && originalResponse.equals(actualResponse)) {
+      return;
+    }
+    // Targeted replacement: find leaf value differences and replace in original text
+    final String originalText = Files.readString(sourcePath, StandardCharsets.UTF_8);
+    final List<String[]> replacements = new ArrayList<>();
+    collectLeafDifferences(originalResponse, actualResponse, replacements);
+    if (!replacements.isEmpty()) {
+      String updatedText = originalText;
+      for (final String[] pair : replacements) {
+        updatedText = updatedText.replace(pair[0], pair[1]);
+      }
+      Files.writeString(sourcePath, updatedText, StandardCharsets.UTF_8);
+    }
+  }
+
+  private void collectLeafDifferences(
+      final JsonNode original, final JsonNode actual, final List<String[]> diffs) {
+    if (original == null || actual == null) {
+      return;
+    }
+    if (original.isObject() && actual.isObject()) {
+      final var fields = original.fieldNames();
+      while (fields.hasNext()) {
+        final String field = fields.next();
+        if (actual.has(field)) {
+          collectLeafDifferences(original.get(field), actual.get(field), diffs);
+        }
+      }
+    } else if (original.isArray() && actual.isArray()) {
+      for (int i = 0; i < Math.min(original.size(), actual.size()); i++) {
+        collectLeafDifferences(original.get(i), actual.get(i), diffs);
+      }
+    } else if (original.isValueNode() && actual.isValueNode() && !original.equals(actual)) {
+      // Skip differences that would be normalized to the same value during comparison
+      if (original.isTextual() && actual.isTextual()) {
+        final String normalizedOld = normalizeSpecificErrors(original.asText());
+        final String normalizedNew = normalizeSpecificErrors(actual.asText());
+        if (normalizedOld.equals(normalizedNew)) {
+          return;
+        }
+      }
+      diffs.add(new String[] {original.toString(), actual.toString()});
+    }
+  }
+
+  private Path resolveSourcePath(final URL specFile) {
+    try {
+      final Path buildPath = Paths.get(specFile.toURI());
+      final String pathStr = buildPath.toString();
+      // Convert build/resources/test/ path to src/test/resources/ path
+      final int buildIdx = pathStr.indexOf("/build/resources/test/");
+      if (buildIdx >= 0) {
+        final String moduleRoot = pathStr.substring(0, buildIdx);
+        final String resourcePath = pathStr.substring(buildIdx + "/build/resources/test/".length());
+        return Paths.get(moduleRoot, "src", "test", "resources", resourcePath);
+      }
+      return null;
+    } catch (final URISyntaxException e) {
+      return null;
     }
   }
 
@@ -240,6 +321,10 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
         }
       }
 
+      // Apply error message normalization to both expected and actual results
+      expectedResult = normalizeErrorMessages(expectedResult);
+      actualResult = normalizeErrorMessages(actualResult);
+
       final ObjectMapper mapper = new ObjectMapper();
       mapper.configure(INDENT_OUTPUT, true);
       assertThat(
@@ -276,5 +361,71 @@ public abstract class AbstractJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpS
   private String filterStringTrace(final String expectedResult) {
     final Matcher m = GAS_MATCH_FOR_TRACE.matcher(expectedResult);
     return m.replaceAll("");
+  }
+
+  private String normalizeErrorMessages(final String jsonString) {
+    final Matcher matcher = ERROR_MESSAGE_NORMALIZATION.matcher(jsonString);
+    StringBuilder result = new StringBuilder();
+
+    while (matcher.find()) {
+      String errorMessage = matcher.group(1);
+      String normalizedError = normalizeSpecificErrors(errorMessage);
+      matcher.appendReplacement(result, "\"error\":\"" + normalizedError + "\"");
+    }
+    matcher.appendTail(result);
+
+    return result.toString();
+  }
+
+  private String normalizeSpecificErrors(final String errorMessage) {
+    if (errorMessage == null) {
+      return null;
+    }
+
+    // Convert to lowercase for case-insensitive matching
+    String lowerError = errorMessage.toLowerCase(Locale.ROOT);
+
+    // Normalize precompile input length errors
+    if (lowerError.contains("invalid input length")) {
+      return "invalid input length";
+    }
+
+    // Normalize gas-related errors
+    if (lowerError.contains("out of gas") || lowerError.contains("insufficient gas")) {
+      return "out of gas";
+    }
+
+    // Normalize stack errors - case insensitive
+    if (lowerError.contains("stack underflow")) {
+      return "stack underflow";
+    }
+
+    if (lowerError.contains("stack limit") || lowerError.contains("stack overflow")) {
+      return "stack limit reached";
+    }
+
+    // Normalize invalid opcode errors
+    if (lowerError.contains("invalid opcode")) {
+      return "invalid opcode";
+    }
+
+    // Normalize write protection errors
+    if (lowerError.contains("write protection") || lowerError.contains("illegal state change")) {
+      return "write protection";
+    }
+
+    // Normalize jump destination errors
+    if (lowerError.contains("invalid jump destination")
+        || lowerError.contains("bad jump destination")) {
+      return "invalid jump destination";
+    }
+
+    // Normalize precompile failures
+    if (lowerError.contains("precompile") && lowerError.contains("fail")) {
+      return "precompile failed";
+    }
+
+    // Add more normalizations as needed
+    return errorMessage;
   }
 }

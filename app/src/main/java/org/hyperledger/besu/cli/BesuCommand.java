@@ -16,9 +16,9 @@ package org.hyperledger.besu.cli;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static java.lang.Long.parseLong;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
-import static java.util.Collections.singletonList;
 import static org.hyperledger.besu.cli.DefaultCommandValues.getDefaultBesuDataPath;
 import static org.hyperledger.besu.cli.util.CommandLineUtils.DEPENDENCY_WARNING_MSG;
 import static org.hyperledger.besu.cli.util.CommandLineUtils.isOptionSet;
@@ -44,7 +44,6 @@ import org.hyperledger.besu.cli.error.BesuParameterExceptionHandler;
 import org.hyperledger.besu.cli.options.ApiConfigurationOptions;
 import org.hyperledger.besu.cli.options.BalConfigurationOptions;
 import org.hyperledger.besu.cli.options.ChainPruningOptions;
-import org.hyperledger.besu.cli.options.DebugTracerOptions;
 import org.hyperledger.besu.cli.options.DnsOptions;
 import org.hyperledger.besu.cli.options.EngineRPCConfiguration;
 import org.hyperledger.besu.cli.options.EngineRPCOptions;
@@ -91,6 +90,7 @@ import org.hyperledger.besu.components.BesuComponent;
 import org.hyperledger.besu.config.CheckpointConfigOptions;
 import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
+import org.hyperledger.besu.config.JsonUtil;
 import org.hyperledger.besu.config.MergeConfiguration;
 import org.hyperledger.besu.config.NetworkDefinition;
 import org.hyperledger.besu.consensus.merge.blockcreation.MergeCoordinator;
@@ -117,6 +117,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.ipc.JsonRpcIpcConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.websocket.WebSocketConfiguration;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
+import org.hyperledger.besu.ethereum.chain.ChainDataPruner.ChainPruningStrategy;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.core.MiningParametersMetrics;
 import org.hyperledger.besu.ethereum.core.VersionMetadata;
@@ -238,6 +239,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BiFunction;
@@ -248,6 +250,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -257,6 +260,10 @@ import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.json.DecodeException;
 import io.vertx.core.json.jackson.DatabindCodec;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.impl.Log4jContextFactory;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.units.bigints.UInt256;
 import org.slf4j.Logger;
@@ -317,7 +324,6 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private final IpcOptions unstableIpcOptions = IpcOptions.create();
   private final ChainPruningOptions unstableChainPruningOptions = ChainPruningOptions.create();
   private final QBFTOptions unstableQbftOptions = QBFTOptions.create();
-  private final DebugTracerOptions unstableDebugTracerOptions = DebugTracerOptions.create();
 
   // stable CLI options
   final DataStorageOptions dataStorageOptions = DataStorageOptions.create();
@@ -348,10 +354,13 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       new PreSynchronizationTaskRunner();
 
   private final Set<Integer> allocatedPorts = new HashSet<>();
-  private final Supplier<GenesisConfig> genesisConfigSupplier =
+  private Supplier<GenesisConfig> genesisConfigSupplier =
       Suppliers.memoize(this::readGenesisConfig);
-  private final Supplier<GenesisConfigOptions> genesisConfigOptionsSupplier =
+
+  /** Memoized supplier for genesis configuration options. Protected to allow test access. */
+  protected final Supplier<GenesisConfigOptions> genesisConfigOptionsSupplier =
       Suppliers.memoize(this::readGenesisConfigOptions);
+
   private final Supplier<MiningConfiguration> miningParametersSupplier =
       Suppliers.memoize(this::getMiningParameters);
   private final Supplier<ApiConfiguration> apiConfigurationSupplier =
@@ -378,7 +387,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       names = {"--data-path"},
       paramLabel = MANDATORY_PATH_FORMAT_HELP,
       description = "The path to Besu data directory (default: ${DEFAULT-VALUE})")
-  final Path dataPath = getDefaultBesuDataPath(this);
+  Path dataPath = getDefaultBesuDataPath(this);
 
   // Genesis file path with null default option.
   // This default is handled by Runner
@@ -401,8 +410,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   @Option(
       names = "--identity",
       paramLabel = "<String>",
-      description = "Identification for this node in the Client ID",
-      arity = "1")
+      description = "Identification for this node in the Client ID")
   private final Optional<String> identityString = Optional.empty();
 
   private Boolean printPathsAndExit = Boolean.FALSE;
@@ -440,15 +448,36 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private final BlockchainServiceImpl blockchainServiceImpl;
   private BesuComponent besuComponent;
 
+  private SyncMode syncMode = null;
+
   @Option(
       names = {"--sync-mode"},
       paramLabel = MANDATORY_MODE_FORMAT_HELP,
       description =
           "Synchronization mode, possible values are ${COMPLETION-CANDIDATES} (default: SNAP if a --network is supplied. FULL otherwise.)")
-  private SyncMode syncMode = null;
+  void setSyncMode(final String value) {
+    final String normalized = value.toUpperCase(Locale.ROOT);
+    if (SyncMode.CHECKPOINT.name().equals(normalized)) {
+      logger.warn(
+          "CHECKPOINT sync mode is deprecated and has been removed. "
+              + "Using SNAP sync mode instead. Your checkpoint configuration will be used automatically.");
+      this.syncMode = SyncMode.SNAP;
+    } else {
+      try {
+        this.syncMode = SyncMode.valueOf(normalized);
+      } catch (IllegalArgumentException e) {
+        throw new ParameterException(
+            this.commandLine,
+            "Invalid value for option '--sync-mode': '"
+                + value
+                + "' is not a valid sync mode. "
+                + "Valid values are: FULL, SNAP");
+      }
+    }
+  }
 
   @Option(
-      names = {"--sync-min-peers", "--fast-sync-min-peers"},
+      names = "--sync-min-peers",
       paramLabel = MANDATORY_INTEGER_FORMAT_HELP,
       description =
           "Minimum number of peers required before starting sync. Has effect only on non-PoS networks. (default: ${DEFAULT-VALUE})")
@@ -495,8 +524,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       names = {"--network-id"},
       paramLabel = "<BIG INTEGER>",
       description =
-          "P2P network identifier. (default: the selected network chain ID or custom genesis chain ID)",
-      arity = "1")
+          "P2P network identifier. (default: the selected network chain ID or custom genesis chain ID)")
   private final BigInteger networkId = null;
 
   @Option(
@@ -504,8 +532,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       paramLabel = MANDATORY_FILE_FORMAT_HELP,
       description =
           "Path to file containing the KZG trusted setup, mandatory for custom networks that support data blobs, "
-              + "optional for overriding named networks default.",
-      arity = "1")
+              + "optional for overriding named networks default.")
   private final Path kzgTrustedSetupFile = null;
 
   @Option(
@@ -581,16 +608,14 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   @SuppressWarnings({"FieldCanBeFinal", "FieldMayBeFinal"}) // PicoCLI requires non-final Strings.
   @Option(
       names = {"--key-value-storage"},
-      description = "Identity for the key-value storage to be used.",
-      arity = "1")
+      description = "Identity for the key-value storage to be used.")
   private String keyValueStorageName = DEFAULT_KEY_VALUE_STORAGE_NAME;
 
   @SuppressWarnings({"FieldCanBeFinal", "FieldMayBeFinal"})
   @Option(
       names = {"--security-module"},
       paramLabel = "<NAME>",
-      description = "Identity for the Security Module to be used.",
-      arity = "1")
+      description = "Identity for the Security Module to be used.")
   private String securityModuleName = DEFAULT_SECURITY_MODULE;
 
   @Option(
@@ -669,8 +694,11 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private BesuConfigurationImpl pluginCommonConfiguration;
 
   private Vertx vertx;
+  private Runner runner;
   private EnodeDnsConfiguration enodeDnsConfiguration;
   private KeyValueStorageProvider keyValueStorageProvider;
+  private KeyPair keyPair;
+  private BigInteger ephemeryNextCycleId = BigInteger.ZERO;
 
   /**
    * Besu command constructor.
@@ -853,11 +881,38 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
 
   private IExecutionStrategy createPluginRegistrationTask(final IExecutionStrategy nextStep) {
     return parseResult -> {
+      if (parseResult.isUsageHelpRequested() || parseResult.isVersionHelpRequested()) {
+        // suppressing the info log to avoid that plugin registrations logs are printed
+        // before the help or the version information
+        suppressInfoLog();
+      }
       besuPluginContext.initialize(PluginsConfigurationOptions.fromCommandLine(commandLine));
       besuPluginContext.registerPlugins();
       commandLine.setExecutionStrategy(nextStep);
       return commandLine.execute(parseResult.originalArgs().toArray(new String[0]));
     };
+  }
+
+  @SuppressWarnings("BannedMethod")
+  private void suppressInfoLog() {
+    // this is specific for Log4j2, in case we switch to another logging framework,
+    // this need to be adapted for it
+
+    // silence already created loggers
+    LoggerContext.getContext(false).getLoggers().forEach(logger -> logger.setLevel(Level.WARN));
+
+    // silence future loggers by configuration
+    if (LogManager.getFactory() instanceof Log4jContextFactory log4jContextFactory) {
+      final var selector = log4jContextFactory.getSelector();
+      selector
+          .getLoggerContexts()
+          .forEach(
+              ctx ->
+                  ctx.getConfiguration()
+                      .getLoggers()
+                      .values()
+                      .forEach(loggerConfig -> loggerConfig.setLevel(Level.WARN)));
+    }
   }
 
   private IExecutionStrategy createDefaultValueProviderTask(final IExecutionStrategy nextStep) {
@@ -927,38 +982,16 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       logger.info("Starting Besu");
 
       // Need to create vertx after cmdline has been parsed, such that metricsSystem is configurable
-      vertx = createVertx(createVertxOptions(besuComponent.getMetricsSystem()));
+      vertx = createVertx(besuComponent.getMetricsSystem());
 
       validateOptions();
 
-      configure();
+      initialProcess();
 
-      setIgnorableStorageSegments();
-
-      // If we're not running against a named network, or if version compat protection has been
-      // explicitly enabled, perform compatibility check
-      VersionMetadata.versionCompatibilityChecks(versionCompatibilityProtection, dataDir());
-
-      configureNativeLibs(Optional.ofNullable(network));
-      if (enablePrecompileCaching) {
-        configurePrecompileCaching();
+      if (network.equals(EPHEMERY)) {
+        long lastGenesisTimestamp = parseLong(genesisConfigOverrides.get("timestamp"));
+        runner.scheduleEphemeryRestart(this, lastGenesisTimestamp);
       }
-
-      besuController = buildController();
-
-      besuPluginContext.beforeExternalServices();
-
-      final var runner = buildRunner();
-      runner.startExternalServices();
-
-      startPlugins(runner);
-      setReleaseMetrics();
-      preSynchronization();
-
-      runner.startEthereumMainLoop();
-
-      besuPluginContext.afterExternalServicesMainLoop();
-
       runner.awaitStop();
 
     } catch (final Exception e) {
@@ -966,6 +999,50 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       logger.debug("Startup failure cause", e);
       throw new ParameterException(this.commandLine, e.getMessage(), e);
     }
+  }
+
+  /**
+   * contains the initial setup and configurations required for Ephemery restart cycles.
+   *
+   * @throws Exception if startup fails
+   */
+  public void initialProcess() throws Exception {
+    if (network.equals(EPHEMERY)) {
+      genesisConfigSupplier = Suppliers.memoize(this::readGenesisConfig);
+      if (BigInteger.ZERO.equals(ephemeryNextCycleId)) {
+        ephemeryNextCycleId = genesisConfigSupplier.get().getConfigOptions().getChainId().get();
+      }
+      dataPath = dataPath.resolve("Ephemery-data-chain-" + ephemeryNextCycleId);
+      ephemeryNextCycleId = ephemeryNextCycleId.add(BigInteger.ONE);
+    }
+
+    configure();
+
+    setIgnorableStorageSegments();
+
+    // If we're not running against a named network, or if version compat protection has been
+    // explicitly enabled, perform compatibility check
+    VersionMetadata.versionCompatibilityChecks(versionCompatibilityProtection, dataDir());
+
+    configureNativeLibs(Optional.ofNullable(network));
+    if (enablePrecompileCaching) {
+      configurePrecompileCaching();
+    }
+
+    besuController = buildController();
+
+    besuPluginContext.beforeExternalServices();
+
+    runner = buildRunner();
+    runner.startExternalServices();
+
+    startPlugins(runner);
+    setReleaseMetrics();
+    preSynchronization();
+
+    runner.startEthereumMainLoop();
+
+    besuPluginContext.afterExternalServicesMainLoop();
   }
 
   private void configurePrecompileCaching() {
@@ -1192,7 +1269,6 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             .put("IPC Options", unstableIpcOptions)
             .put("Chain Data Pruning Options", unstableChainPruningOptions)
             .put("QBFT Options", unstableQbftOptions)
-            .put("Debug Tracer Options", unstableDebugTracerOptions)
             .build();
 
     UnstableOptionsSubCommand.createUnstableOptions(commandLine, unstableOptions);
@@ -1229,7 +1305,8 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   }
 
   private SecurityModule defaultSecurityModule() {
-    return new KeyPairSecurityModule(loadKeyPair(nodePrivateKeyFileOption.getNodePrivateKeyFile()));
+    keyPair = loadKeyPair(nodePrivateKeyFileOption.getNodePrivateKeyFile());
+    return new KeyPairSecurityModule(keyPair);
   }
 
   /**
@@ -1246,7 +1323,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     preSynchronizationTaskRunner.runTasks(besuController);
   }
 
-  private Runner buildRunner() {
+  Runner buildRunner() {
     return synchronize(
         besuController,
         p2PDiscoveryConfig.p2pEnabled(),
@@ -1302,7 +1379,8 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             besuController.getSyncState(),
             besuController.getProtocolContext().getWorldStateArchive()));
 
-    besuPluginContext.addService(P2PService.class, new P2PServiceImpl(runner.getP2PNetwork()));
+    besuPluginContext.addService(
+        P2PService.class, new P2PServiceImpl(runner.getP2PNetwork(), besuController.getEthPeers()));
 
     besuPluginContext.addService(
         TransactionPoolService.class,
@@ -1419,17 +1497,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       }
     }
 
-    if (genesisConfigOptionsSupplier.get().getCancunTime().isPresent()
-        || genesisConfigOptionsSupplier.get().getCancunEOFTime().isPresent()
-        || genesisConfigOptionsSupplier.get().getPragueTime().isPresent()
-        || genesisConfigOptionsSupplier.get().getOsakaTime().isPresent()
-        || genesisConfigOptionsSupplier.get().getBpo1Time().isPresent()
-        || genesisConfigOptionsSupplier.get().getBpo2Time().isPresent()
-        || genesisConfigOptionsSupplier.get().getBpo3Time().isPresent()
-        || genesisConfigOptionsSupplier.get().getBpo4Time().isPresent()
-        || genesisConfigOptionsSupplier.get().getBpo5Time().isPresent()
-        || genesisConfigOptionsSupplier.get().getAmsterdamTime().isPresent()
-        || genesisConfigOptionsSupplier.get().getFutureEipsTime().isPresent()) {
+    if (hasKzgFork(readGenesisConfigOptions())) {
       if (kzgTrustedSetupFile != null) {
         KZGPointEvalPrecompiledContract.init(kzgTrustedSetupFile);
       } else {
@@ -1596,36 +1664,66 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   }
 
   private void validateChainDataPruningParams() {
-    Long chainDataPruningBlocksRetained =
-        unstableChainPruningOptions.getChainDataPruningBlocksRetained();
-    if (unstableChainPruningOptions.getChainDataPruningEnabled()) {
+    final ChainPruningStrategy chainPruningStrategy =
+        unstableChainPruningOptions.getChainPruningStrategy();
+    final long blocksRetained = unstableChainPruningOptions.getChainDataPruningBlocksRetained();
+    final long balsRetained = unstableChainPruningOptions.getChainDataPruningBalsRetained();
+    final long retainedMinimum = unstableChainPruningOptions.getChainDataPruningRetainedMinimum();
+
+    // Skip validation if pruning is disabled
+    if (chainPruningStrategy == ChainPruningStrategy.NONE) {
+      return;
+    }
+
+    // Basic validation
+    if (blocksRetained < 0) {
+      throw new ParameterException(
+          this.commandLine, "--Xchain-pruning-blocks-retained must be >= 0");
+    }
+    if (balsRetained < 0) {
+      throw new ParameterException(this.commandLine, "--Xchain-pruning-bals-retained must be >= 0");
+    }
+    if (retainedMinimum < 0) {
+      throw new ParameterException(
+          this.commandLine, "--Xchain-pruning-retained-minimum must be >= 0");
+    }
+
+    // Validate blocks pruning (when mode is ALL)
+    if (chainPruningStrategy == ChainPruningStrategy.ALL) {
+      if (blocksRetained < retainedMinimum) {
+        throw new ParameterException(
+            this.commandLine, "--Xchain-pruning-blocks-retained must be >= " + retainedMinimum);
+      }
+
       final GenesisConfigOptions genesisConfigOptions = readGenesisConfigOptions();
-      if (chainDataPruningBlocksRetained
-          < unstableChainPruningOptions.getChainDataPruningBlocksRetainedLimit()) {
+      if (genesisConfigOptions.isPoa()) {
+        final var epochLengthOpt = getPoaEpochLength(genesisConfigOptions);
+        if (epochLengthOpt.isPresent()) {
+          final long epochLength = epochLengthOpt.getAsLong();
+          if (blocksRetained < epochLength) {
+            throw new ParameterException(
+                this.commandLine,
+                String.format(
+                    "--Xchain-pruning-blocks-retained(%d) must be >= epochlength(%d) for %s",
+                    blocksRetained, epochLength, getConsensusMechanism(genesisConfigOptions)));
+          }
+        }
+      }
+    }
+
+    // Validate BAL pruning (when mode is BAL or ALL)
+    if (chainPruningStrategy == ChainPruningStrategy.BAL
+        || chainPruningStrategy == ChainPruningStrategy.ALL) {
+      if (balsRetained < retainedMinimum) {
+        throw new ParameterException(
+            this.commandLine, "--Xchain-pruning-bals-retained must be >= " + retainedMinimum);
+      }
+
+      // When both are enabled (ALL mode), BAL retention can't exceed block retention
+      if (chainPruningStrategy == ChainPruningStrategy.ALL && balsRetained > blocksRetained) {
         throw new ParameterException(
             this.commandLine,
-            "--Xchain-pruning-blocks-retained must be >= "
-                + unstableChainPruningOptions.getChainDataPruningBlocksRetainedLimit());
-      } else if (genesisConfigOptions.isPoa()) {
-        long epochLength = 0L;
-        String consensusMechanism = "";
-        if (genesisConfigOptions.isIbft2()) {
-          epochLength = genesisConfigOptions.getBftConfigOptions().getEpochLength();
-          consensusMechanism = "IBFT2";
-        } else if (genesisConfigOptions.isQbft()) {
-          epochLength = genesisConfigOptions.getQbftConfigOptions().getEpochLength();
-          consensusMechanism = "QBFT";
-        } else if (genesisConfigOptions.isClique()) {
-          epochLength = genesisConfigOptions.getCliqueConfigOptions().getEpochLength();
-          consensusMechanism = "Clique";
-        }
-        if (chainDataPruningBlocksRetained < epochLength) {
-          throw new ParameterException(
-              this.commandLine,
-              String.format(
-                  "--Xchain-pruning-blocks-retained(%d) must be >= epochlength(%d) for %s",
-                  chainDataPruningBlocksRetained, epochLength, consensusMechanism));
-        }
+            "--Xchain-pruning-bals-retained must be <= --Xchain-pruning-blocks-retained when pruning mode is ALL");
       }
     }
   }
@@ -1636,7 +1734,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
         network.equals(EPHEMERY)
             ? EphemeryGenesisUpdater.updateGenesis(genesisConfigOverrides)
             : genesisFile != null
-                ? GenesisConfig.fromSource(genesisConfigSource(genesisFile))
+                ? GenesisConfig.fromConfig(loadAndTransformGenesisFile(genesisFile))
                 : GenesisConfig.fromResource(
                     Optional.ofNullable(network).orElse(MAINNET).getGenesisFile());
     return effectiveGenesisFile.withOverrides(genesisConfigOverrides);
@@ -1649,6 +1747,199 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       throw new ParameterException(
           this.commandLine, "Unable to load genesis file. " + e.getCause());
     }
+  }
+
+  /**
+   * Loads a genesis file from File and applies Geth-to-Besu transformation if needed.
+   *
+   * @param genesisFile the genesis file
+   * @return the loaded and potentially transformed ObjectNode
+   */
+  private ObjectNode loadAndTransformGenesisFile(final File genesisFile) {
+    try {
+      final URL url = genesisFile.toURI().toURL();
+      final ObjectNode genesisRoot = JsonUtil.objectNodeFromURL(url, false);
+
+      // Check if this is a Geth format genesis file and transform if needed
+      if (isGethFormat(genesisRoot)) {
+        transformGethToBesu(genesisRoot);
+      }
+
+      return genesisRoot;
+    } catch (final Exception e) {
+      // Extract the root cause for better error reporting
+      Throwable rootCause = e;
+      while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+        rootCause = rootCause.getCause();
+      }
+      throw new RuntimeException("Unable to load genesis file: " + genesisFile, rootCause);
+    }
+  }
+
+  /**
+   * Detects if a genesis file is in Geth format.
+   *
+   * <p>A genesis file is considered Geth format if:
+   *
+   * <ul>
+   *   <li>It has a "config" section
+   *   <li>The config has a "mergeNetsplitBlock" field (Geth-specific)
+   *   <li>The config does NOT have an "ethash" field (Besu-specific)
+   * </ul>
+   *
+   * @param genesisRoot the root genesis JSON node
+   * @return true if this is a Geth format genesis file
+   */
+  private boolean isGethFormat(final ObjectNode genesisRoot) {
+    final Optional<ObjectNode> configNode = JsonUtil.getObjectNode(genesisRoot, "config");
+    if (!configNode.isPresent()) {
+      return false;
+    }
+
+    final ObjectNode config = configNode.get();
+    final boolean hasMergeNetsplitBlock = config.has("mergeNetsplitBlock");
+    final boolean hasEthash = config.has("ethash");
+
+    // It's Geth format if it has mergeNetsplitBlock but not ethash
+    return hasMergeNetsplitBlock && !hasEthash;
+  }
+
+  /**
+   * Transforms a Geth-format genesis file to Besu format by applying five transformations.
+   *
+   * <p>Transformations applied:
+   *
+   * <ol>
+   *   <li><b>Add ethash field:</b> Besu's {@code isEthHash()} method checks for the presence of
+   *       this field in the JSON structure. Since this is a structural check, the overrides
+   *       mechanism doesn't work - we must add it to the JSON.
+   *   <li><b>Map mergeNetsplitBlock to preMergeForkBlock:</b> These fields serve identical purposes
+   *       (marking the merge activation block) but use different names in Geth vs Besu.
+   *   <li><b>Add baseFeePerGas:</b> When London fork is activated at genesis (block 0), Besu
+   *       expects an explicit base fee. Geth may omit this field, so we add the standard default of
+   *       1 gwei (0x3B9ACA00).
+   *   <li><b>Add withdrawalRequestContractAddress:</b> EIP-7002 withdrawal request contract address
+   *       if missing.
+   *   <li><b>Add consolidationRequestContractAddress:</b> EIP-7251 consolidation request contract
+   *       address if missing.
+   * </ol>
+   *
+   * @param genesisRoot the root genesis JSON node (will be modified in place)
+   */
+  private void transformGethToBesu(final ObjectNode genesisRoot) {
+    final Optional<ObjectNode> configNode = JsonUtil.getObjectNode(genesisRoot, "config");
+    if (!configNode.isPresent()) {
+      return;
+    }
+
+    final ObjectNode config = configNode.get();
+
+    // Add ethash field if not present
+    if (!config.has("ethash")) {
+      config.set("ethash", JsonUtil.createEmptyObjectNode());
+    }
+
+    // Map mergeNetsplitBlock to preMergeForkBlock
+    if (config.has("mergeNetsplitBlock") && !config.has("preMergeForkBlock")) {
+      final long mergeBlock = config.get("mergeNetsplitBlock").asLong();
+      config.put("preMergeForkBlock", mergeBlock);
+    }
+
+    // Add baseFeePerGas if London is at genesis
+    if (!genesisRoot.has("baseFeePerGas") && config.has("londonBlock")) {
+      final long londonBlock = config.get("londonBlock").asLong(Long.MAX_VALUE);
+      if (londonBlock == 0) {
+        // Add default 1 gwei base fee
+        genesisRoot.put("baseFeePerGas", "0x3B9ACA00");
+      }
+    }
+
+    // Add withdrawalRequestContractAddress if missing (EIP-7002)
+    if (!config.has("withdrawalRequestContractAddress")) {
+      config.put("withdrawalRequestContractAddress", "0x00000961ef480eb55e80d19ad83579a64c007002");
+    }
+
+    // Add consolidationRequestContractAddress if missing (EIP-7251)
+    if (!config.has("consolidationRequestContractAddress")) {
+      config.put(
+          "consolidationRequestContractAddress", "0x0000bbddc7ce488642fb579f8b00f3a590007251");
+    }
+  }
+
+  /**
+   * Checks if the genesis configuration includes any fork times that require KZG initialization.
+   * This includes Cancun and all subsequent forks that use KZG commitments for EIP-4844 blob
+   * transactions.
+   *
+   * @param genesisConfigOptions the genesis config options
+   * @return true if any KZG-requiring fork time is present
+   */
+  private boolean hasKzgFork(final GenesisConfigOptions genesisConfigOptions) {
+    return genesisConfigOptions.getCancunTime().isPresent()
+        || genesisConfigOptions.getPragueTime().isPresent()
+        || genesisConfigOptions.getOsakaTime().isPresent()
+        || genesisConfigOptions.getBpo1Time().isPresent()
+        || genesisConfigOptions.getBpo2Time().isPresent()
+        || genesisConfigOptions.getBpo3Time().isPresent()
+        || genesisConfigOptions.getBpo4Time().isPresent()
+        || genesisConfigOptions.getBpo5Time().isPresent()
+        || genesisConfigOptions.getAmsterdamTime().isPresent()
+        || genesisConfigOptions.getFutureEipsTime().isPresent();
+  }
+
+  /**
+   * Gets the block period in seconds based on the consensus mechanism.
+   *
+   * @param genesisConfigOptions the genesis config options
+   * @return the block period in seconds, or empty if not applicable
+   */
+  private OptionalInt getBlockPeriodSeconds(final GenesisConfigOptions genesisConfigOptions) {
+    if (genesisConfigOptions.isClique()) {
+      return OptionalInt.of(genesisConfigOptions.getCliqueConfigOptions().getBlockPeriodSeconds());
+    }
+    if (genesisConfigOptions.isIbft2()) {
+      return OptionalInt.of(genesisConfigOptions.getBftConfigOptions().getBlockPeriodSeconds());
+    }
+    if (genesisConfigOptions.isQbft()) {
+      return OptionalInt.of(genesisConfigOptions.getQbftConfigOptions().getBlockPeriodSeconds());
+    }
+    return OptionalInt.empty();
+  }
+
+  /**
+   * Gets the epoch length for PoA consensus mechanisms.
+   *
+   * @param genesisConfigOptions the genesis config options
+   * @return epoch length if PoA consensus is configured, empty otherwise
+   */
+  private OptionalLong getPoaEpochLength(final GenesisConfigOptions genesisConfigOptions) {
+    if (genesisConfigOptions.isIbft2()) {
+      return OptionalLong.of(genesisConfigOptions.getBftConfigOptions().getEpochLength());
+    } else if (genesisConfigOptions.isQbft()) {
+      return OptionalLong.of(genesisConfigOptions.getQbftConfigOptions().getEpochLength());
+    } else if (genesisConfigOptions.isClique()) {
+      return OptionalLong.of(genesisConfigOptions.getCliqueConfigOptions().getEpochLength());
+    }
+    return OptionalLong.empty();
+  }
+
+  /**
+   * Gets the name of the consensus mechanism configured in the genesis.
+   *
+   * @param genesisConfigOptions the genesis config options
+   * @return the consensus mechanism name (e.g., "IBFT2", "QBFT", "Clique", "Ethash")
+   */
+  private String getConsensusMechanism(final GenesisConfigOptions genesisConfigOptions) {
+    if (genesisConfigOptions.isIbft2()) {
+      return "IBFT2";
+    } else if (genesisConfigOptions.isQbft()) {
+      return "QBFT";
+    } else if (genesisConfigOptions.isClique()) {
+      return "Clique";
+    } else if (genesisConfigOptions.isEthHash()) {
+      return "Ethash";
+    }
+    return "Unknown";
   }
 
   private void issueOptionWarnings() {
@@ -1670,20 +1961,10 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             "--p2p-port",
             "--remote-connections-max-percentage"));
 
-    if (SyncMode.FAST == syncMode) {
-      logger.warn("FAST sync is deprecated. Recommend using SNAP sync instead.");
-    }
-
     if (SyncMode.isFullSync(getDefaultSyncModeIfNotSet())
         && isOptionSet(commandLine, "--sync-min-peers")) {
       logger.warn("--sync-min-peers is ignored in FULL sync-mode");
     }
-
-    CommandLineUtils.failIfOptionDoesntMeetRequirement(
-        commandLine,
-        "--Xcheckpoint-post-merge-enabled can only be used with CHECKPOINT sync-mode",
-        getDefaultSyncModeIfNotSet() == SyncMode.CHECKPOINT,
-        singletonList("--Xcheckpoint-post-merge-enabled"));
 
     CommandLineUtils.failIfOptionDoesntMeetRequirement(
         commandLine,
@@ -2037,7 +2318,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private MiningConfiguration getMiningParameters() {
     miningOptions.setTransactionSelectionService(transactionSelectionServiceImpl);
     final var miningParameters = miningOptions.toDomainObject();
-    getGenesisBlockPeriodSeconds(genesisConfigOptionsSupplier.get())
+    getBlockPeriodSeconds(readGenesisConfigOptions())
         .ifPresent(miningParameters::setBlockPeriodSeconds);
     initMiningParametersMetrics(miningParameters);
 
@@ -2103,23 +2384,6 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
 
   private void initMiningParametersMetrics(final MiningConfiguration miningConfiguration) {
     new MiningParametersMetrics(getMetricsSystem(), miningConfiguration);
-  }
-
-  private OptionalInt getGenesisBlockPeriodSeconds(
-      final GenesisConfigOptions genesisConfigOptions) {
-    if (genesisConfigOptions.isClique()) {
-      return OptionalInt.of(genesisConfigOptions.getCliqueConfigOptions().getBlockPeriodSeconds());
-    }
-
-    if (genesisConfigOptions.isIbft2()) {
-      return OptionalInt.of(genesisConfigOptions.getBftConfigOptions().getBlockPeriodSeconds());
-    }
-
-    if (genesisConfigOptions.isQbft()) {
-      return OptionalInt.of(genesisConfigOptions.getQbftConfigOptions().getBlockPeriodSeconds());
-    }
-
-    return OptionalInt.empty();
   }
 
   // Blockchain synchronization from peers.
@@ -2193,23 +2457,17 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   }
 
   /**
-   * Builds Vertx instance from VertxOptions. Visible for testing.
+   * Builds Vertx instance from MetricsSystem. Visible for testing.
    *
-   * @param vertxOptions Instance of VertxOptions
+   * @param metricsSystem Instance of MetricsSystem
    * @return Instance of Vertx.
    */
   @VisibleForTesting
-  protected Vertx createVertx(final VertxOptions vertxOptions) {
-    return Vertx.vertx(vertxOptions);
-  }
-
-  private VertxOptions createVertxOptions(final MetricsSystem metricsSystem) {
-    return new VertxOptions()
-        .setPreferNativeTransport(true)
-        .setMetricsOptions(
-            new io.vertx.core.metrics.MetricsOptions()
-                .setEnabled(true)
-                .setFactory(new VertxMetricsAdapterFactory(metricsSystem)));
+  protected Vertx createVertx(final MetricsSystem metricsSystem) {
+    return Vertx.builder()
+        .with(new VertxOptions().setPreferNativeTransport(true))
+        .withMetrics(new VertxMetricsAdapterFactory(metricsSystem))
+        .build();
   }
 
   private void addShutdownHook(final Runner runner) {
@@ -2244,8 +2502,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
         // If no chain id is found in the genesis, use mainnet network id
         try {
           builder.setNetworkId(
-              genesisConfigOptionsSupplier
-                  .get()
+              readGenesisConfigOptions()
                   .getChainId()
                   .orElse(EthNetworkConfig.getNetworkConfig(MAINNET).networkId()));
         } catch (final DecodeException e) {
@@ -2311,15 +2568,6 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       builder.setBootNodes(listBootNodes);
     }
     return builder.build();
-  }
-
-  private URL genesisConfigSource(final File genesisFile) {
-    try {
-      return genesisFile.toURI().toURL();
-    } catch (final IOException e) {
-      throw new ParameterException(
-          this.commandLine, String.format("Unable to load genesis URL %s.", genesisFile), e);
-    }
   }
 
   /**
@@ -2549,42 +2797,23 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
 
   /** Set ignorable segments in RocksDB Storage Provider plugin. */
   public void setIgnorableStorageSegments() {
-    if (!unstableChainPruningOptions.getChainDataPruningEnabled()
+    if (unstableChainPruningOptions.getChainPruningStrategy().equals(ChainPruningStrategy.NONE)
         && !dataStorageConfiguration.getHistoryExpiryPruneEnabled()) {
       rocksDBPlugin.addIgnorableSegmentIdentifier(KeyValueSegmentIdentifier.CHAIN_PRUNER_STATE);
     }
   }
 
   private void validatePostMergeCheckpointBlockRequirements() {
-    final SynchronizerConfiguration synchronizerConfiguration =
-        unstableSynchronizerOptions.toDomainObject().build();
-    final Optional<UInt256> terminalTotalDifficulty =
-        genesisConfigOptionsSupplier.get().getTerminalTotalDifficulty();
+    final GenesisConfigOptions genesisConfigOptions = readGenesisConfigOptions();
     final CheckpointConfigOptions checkpointConfigOptions =
-        genesisConfigOptionsSupplier.get().getCheckpointOptions();
-    if (synchronizerConfiguration.isCheckpointPostMergeEnabled()) {
+        genesisConfigOptions.getCheckpointOptions();
+
+    // Only validate if checkpoint config is not the default (empty) one
+    if (checkpointConfigOptions != CheckpointConfigOptions.DEFAULT) {
       if (!checkpointConfigOptions.isValid()) {
         throw new InvalidConfigurationException(
-            "PoS checkpoint sync requires a checkpoint block configured in the genesis file");
+            "The checkpoint block configured in the genesis file is not valid.");
       }
-      terminalTotalDifficulty.ifPresentOrElse(
-          ttd -> {
-            if (UInt256.fromHexString(checkpointConfigOptions.getTotalDifficulty().get())
-                    .equals(UInt256.ZERO)
-                && ttd.equals(UInt256.ZERO)) {
-              throw new InvalidConfigurationException(
-                  "PoS checkpoint sync can't be used with TTD = 0 and checkpoint totalDifficulty = 0");
-            }
-            if (UInt256.fromHexString(checkpointConfigOptions.getTotalDifficulty().get())
-                .lessThan(ttd)) {
-              throw new InvalidConfigurationException(
-                  "PoS checkpoint sync requires a block with total difficulty greater or equal than the TTD");
-            }
-          },
-          () -> {
-            throw new InvalidConfigurationException(
-                "PoS checkpoint sync requires TTD in the genesis file");
-          });
     }
   }
 
@@ -2681,11 +2910,21 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       }
     }
 
+    // Add chain pruning configuration
+    final ChainPruningStrategy pruningStrategy =
+        unstableChainPruningOptions.getChainPruningStrategy();
+    if (!pruningStrategy.equals(ChainPruningStrategy.NONE)) {
+      builder.setChainPruningEnabled(
+          pruningStrategy,
+          unstableChainPruningOptions.getChainDataPruningBlocksRetained(),
+          unstableChainPruningOptions.getChainDataPruningBalsRetained());
+    }
+
     if (miningParametersSupplier.get().getTargetGasLimit().isPresent()) {
       builder.setTargetGasLimit(miningParametersSupplier.get().getTargetGasLimit().getAsLong());
     } else {
-      builder.setTargetGasLimit(
-          MergeCoordinator.getDefaultGasLimitByChainId(Optional.of(ethNetworkConfig.networkId())));
+      MergeCoordinator.getDefaultGasLimitByChainId(genesisConfigOptionsSupplier.get().getChainId())
+          .ifPresent(builder::setTargetGasLimit);
     }
 
     builder
@@ -2716,5 +2955,56 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
    */
   public MetricsOptions getMetricsOptions() {
     return metricsOptions;
+  }
+
+  /**
+   * returns current runner for Ephemery restart.
+   *
+   * @return current runner
+   */
+  public Runner getRunner() {
+    return this.runner;
+  }
+
+  /**
+   * returns rocksDBPlugin for Ephemery restart.
+   *
+   * @return rocksDBPlugin
+   */
+  public RocksDBPlugin getRocksDBPlugin() {
+    return this.rocksDBPlugin;
+  }
+
+  /**
+   * returns keyPair for Ephemery restart.
+   *
+   * @return KeyPair
+   */
+  public KeyPair getKeyPair() {
+    return keyPair;
+  }
+
+  /**
+   * returns commandLine for Ephemery restart.
+   *
+   * @return KeyPair
+   */
+  public CommandLine getCommandLine() {
+    return this.commandLine;
+  }
+
+  /** Clears all allocated ports for Ephemery restart. */
+  public void clearAllocatedPorts() {
+    allocatedPorts.clear();
+  }
+
+  /** Sets data path to parent for Ephemery restart. */
+  public void setDataPathToParent() {
+    this.dataPath = dataPath.getParent();
+  }
+
+  @VisibleForTesting
+  Supplier<GenesisConfig> getGenesisConfigSupplier() {
+    return genesisConfigSupplier;
   }
 }

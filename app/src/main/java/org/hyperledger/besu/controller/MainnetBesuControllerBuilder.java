@@ -23,7 +23,6 @@ import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManager;
 import org.hyperledger.besu.ethereum.eth.sync.state.SyncState;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
-import org.hyperledger.besu.ethereum.mainnet.EpochCalculator;
 import org.hyperledger.besu.ethereum.mainnet.MainnetProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
@@ -32,8 +31,6 @@ import java.util.Optional;
 
 /** The Mainnet besu controller builder. */
 public class MainnetBesuControllerBuilder extends BesuControllerBuilder {
-
-  private EpochCalculator epochCalculator = new EpochCalculator.DefaultEpochCalculator();
 
   /** Default constructor. */
   public MainnetBesuControllerBuilder() {}
@@ -79,9 +76,6 @@ public class MainnetBesuControllerBuilder extends BesuControllerBuilder {
 
   @Override
   protected void prepForBuild() {
-    genesisConfigOptions
-        .getThanosBlockNumber()
-        .ifPresent(
-            activationBlock -> epochCalculator = new EpochCalculator.Ecip1099EpochCalculator());
+    // No special preparation needed for mainnet
   }
 }

@@ -117,7 +117,7 @@ public final class EthProtocolManagerTest {
   private static BlockDataGenerator gen;
   private static ProtocolContext protocolContext;
   private static final MetricsSystem metricsSystem = new NoOpMetricsSystem();
-  private static final ForkId forkId = new ForkId(Hash.ZERO, 0);
+  private static final ForkId forkId = new ForkId(Hash.ZERO.getBytes(), 0);
 
   @BeforeAll
   public static void setup() {
@@ -1284,8 +1284,8 @@ public final class EthProtocolManagerTest {
 
       // Verify the regular message executor execute.
       verifyNoInteractions(worker);
-      // Verify that the scheduled executor scheduled the BlockRangeBroadcaster task.
-      verify(scheduled).scheduleWithFixedDelay(any(), anyLong(), anyLong(), any());
+      // Verify that the scheduled executor scheduled two tasks
+      verify(scheduled, times(2)).scheduleWithFixedDelay(any(), anyLong(), anyLong(), any());
       // Verify our transactions executor got something to execute.
       verify(transactions).execute(any());
     }
@@ -1296,8 +1296,6 @@ public final class EthProtocolManagerTest {
     assertHighestCapability(SyncMode.SNAP, EthProtocol.ETH69);
     assertHighestCapability(SyncMode.FULL, EthProtocol.ETH69);
     assertHighestCapability(SyncMode.CHECKPOINT, EthProtocol.ETH69);
-    /* Eth67 does not support fast sync, see EIP-4938 */
-    assertHighestCapability(SyncMode.FAST, EthProtocol.ETH66);
   }
 
   @Test
@@ -1312,8 +1310,6 @@ public final class EthProtocolManagerTest {
     assertHighestCapability(SyncMode.SNAP, EthProtocol.ETH68, configuration);
     assertHighestCapability(SyncMode.FULL, EthProtocol.ETH68, configuration);
     assertHighestCapability(SyncMode.CHECKPOINT, EthProtocol.ETH68, configuration);
-    /* Eth67 does not support fast sync, see EIP-4938 */
-    assertHighestCapability(SyncMode.FAST, EthProtocol.ETH66, configuration);
   }
 
   @Test
@@ -1343,8 +1339,6 @@ public final class EthProtocolManagerTest {
     assertHighestCapability(SyncMode.SNAP, EthProtocol.ETH68, configuration);
     assertHighestCapability(SyncMode.FULL, EthProtocol.ETH68, configuration);
     assertHighestCapability(SyncMode.CHECKPOINT, EthProtocol.ETH68, configuration);
-    /* Eth67 does not support fast sync, see EIP-4938 */
-    assertHighestCapability(SyncMode.FAST, EthProtocol.ETH66, configuration);
   }
 
   @Test

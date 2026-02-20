@@ -28,7 +28,6 @@ import org.hyperledger.besu.ethereum.eth.sync.checkpointsync.CheckpointDownloade
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.FastSyncDownloader;
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.FastSyncState;
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.NoSyncRequiredState;
-import org.hyperledger.besu.ethereum.eth.sync.fastsync.worldstate.FastDownloaderFactory;
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.FullSyncDownloader;
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.SyncTerminationCondition;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.SnapDownloaderFactory;
@@ -100,10 +99,8 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     ChainHeadTracker.trackChainHeadForPeers(
         ethContext,
         protocolSchedule,
-        syncConfig,
         protocolContext.getBlockchain(),
-        this::calculateTrailingPeerRequirements,
-        metricsSystem);
+        this::calculateTrailingPeerRequirements);
 
     if (syncConfig.getSyncMode() == SyncMode.SNAP
         || syncConfig.getSyncMode() == SyncMode.CHECKPOINT) {
@@ -143,20 +140,6 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
 
     this.fastSyncFactory =
         switch (syncConfig.getSyncMode()) {
-          case FAST ->
-              () ->
-                  FastDownloaderFactory.create(
-                      pivotBlockSelector,
-                      syncConfig,
-                      dataDirectory,
-                      protocolSchedule,
-                      protocolContext,
-                      metricsSystem,
-                      ethContext,
-                      worldStateStorageCoordinator,
-                      syncState,
-                      clock,
-                      syncDurationMetrics);
           case CHECKPOINT ->
               () ->
                   CheckpointDownloaderFactory.createCheckpointDownloader(
@@ -378,7 +361,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
           if (this.protocolContext.getWorldStateArchive() instanceof BonsaiWorldStateProvider) {
             ((BonsaiWorldStateProvider) this.protocolContext.getWorldStateArchive())
                 .prepareStateHealing(
-                    org.hyperledger.besu.datatypes.Address.wrap(address), location);
+                    org.hyperledger.besu.datatypes.Address.wrap(address.getBytes()), location);
           }
           this.syncState.markAccountToRepair(maybeAccountToRepair);
         });

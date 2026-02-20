@@ -73,9 +73,14 @@ import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 import org.hyperledger.besu.ethereum.mainnet.BalConfiguration;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryConfiguration;
+import org.hyperledger.besu.ethereum.p2p.config.ImmutableNetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.RlpxConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.SubProtocolConfiguration;
+import org.hyperledger.besu.ethereum.p2p.discovery.DefaultPeerDiscoveryAgentFactory;
+import org.hyperledger.besu.ethereum.p2p.discovery.DefaultRlpxAgentFactory;
+import org.hyperledger.besu.ethereum.p2p.discovery.PeerDiscoveryAgentFactory;
+import org.hyperledger.besu.ethereum.p2p.discovery.RlpxAgentFactory;
 import org.hyperledger.besu.ethereum.p2p.network.DefaultP2PNetwork;
 import org.hyperledger.besu.ethereum.p2p.network.NetworkRunner;
 import org.hyperledger.besu.ethereum.p2p.network.NetworkRunner.NetworkBuilder;
@@ -154,7 +159,7 @@ public class RunnerBuilder {
   private Vertx vertx;
   private BesuController besuController;
 
-  private NetworkingConfiguration networkingConfiguration = NetworkingConfiguration.create();
+  private NetworkingConfiguration networkingConfiguration = NetworkingConfiguration.DEFAULT;
   private final Collection<Bytes> bannedNodeIds = new ArrayList<>();
   private boolean p2pEnabled = true;
   private boolean discoveryEnabled;
@@ -636,9 +641,9 @@ public class RunnerBuilder {
       LOG.debug("Bootnodes = {}", bootstrap);
       discoveryConfiguration.setDnsDiscoveryURL(ethNetworkConfig.dnsDiscoveryUrl());
       discoveryConfiguration.setDiscoveryV5Enabled(
-          networkingConfiguration.getDiscovery().isDiscoveryV5Enabled());
+          networkingConfiguration.discoveryConfiguration().isDiscoveryV5Enabled());
       discoveryConfiguration.setFilterOnEnrForkId(
-          networkingConfiguration.getDiscovery().isFilterOnEnrForkIdEnabled());
+          networkingConfiguration.discoveryConfiguration().isFilterOnEnrForkIdEnabled());
     } else {
       discoveryConfiguration.setEnabled(false);
     }
@@ -664,7 +669,12 @@ public class RunnerBuilder {
             .setBindPort(p2pListenPort)
             .setSupportedProtocols(subProtocols)
             .setClientId(BesuVersionUtils.nodeName(identityString));
-    networkingConfiguration.setRlpx(rlpxConfiguration).setDiscovery(discoveryConfiguration);
+    networkingConfiguration =
+        ImmutableNetworkingConfiguration.builder()
+            .from(networkingConfiguration)
+            .rlpxConfiguration(rlpxConfiguration)
+            .discoveryConfiguration(discoveryConfiguration)
+            .build();
 
     final PeerPermissionsDenylist bannedNodes = PeerPermissionsDenylist.create();
     bannedNodeIds.forEach(bannedNodes::add);
@@ -697,25 +707,44 @@ public class RunnerBuilder {
     final NatService natService = new NatService(buildNatManager(natMethod), fallbackEnabled);
     final NetworkBuilder inactiveNetwork = caps -> new NoopP2PNetwork();
 
+    PeerDiscoveryAgentFactory peerDiscoveryAgentFactory =
+        DefaultPeerDiscoveryAgentFactory.builder()
+            .vertx(vertx)
+            .nodeKey(nodeKey)
+            .config(networkingConfiguration)
+            .peerPermissions(peerPermissions)
+            .natService(natService)
+            .metricsSystem(metricsSystem)
+            .storageProvider(storageProvider)
+            .blockchain(context.getBlockchain())
+            .blockNumberForks(besuController.getGenesisConfigOptions().getForkBlockNumbers())
+            .timestampForks(besuController.getGenesisConfigOptions().getForkBlockTimestamps())
+            .build();
+
+    RlpxAgentFactory rlpxAgentFactory =
+        DefaultRlpxAgentFactory.builder()
+            .nodeKey(nodeKey)
+            .config(networkingConfiguration)
+            .peerPermissions(peerPermissions)
+            .metricsSystem(metricsSystem)
+            .allConnectionsSupplier(ethPeers::streamAllConnections)
+            .allActiveConnectionsSupplier(ethPeers::streamAllActiveConnections)
+            .maxPeers(ethPeers.getMaxPeers())
+            .build();
+
     final NetworkBuilder activeNetwork =
-        caps -> {
-          return DefaultP2PNetwork.builder()
-              .vertx(vertx)
-              .nodeKey(nodeKey)
-              .config(networkingConfiguration)
-              .peerPermissions(peerPermissions)
-              .metricsSystem(metricsSystem)
-              .supportedCapabilities(caps)
-              .natService(natService)
-              .storageProvider(storageProvider)
-              .blockchain(context.getBlockchain())
-              .blockNumberForks(besuController.getGenesisConfigOptions().getForkBlockNumbers())
-              .timestampForks(besuController.getGenesisConfigOptions().getForkBlockTimestamps())
-              .allConnectionsSupplier(ethPeers::streamAllConnections)
-              .allActiveConnectionsSupplier(ethPeers::streamAllActiveConnections)
-              .maxPeers(ethPeers.getMaxPeers())
-              .build();
-        };
+        caps ->
+            DefaultP2PNetwork.builder()
+                .vertx(vertx)
+                .nodeKey(nodeKey)
+                .config(networkingConfiguration)
+                .peerPermissions(peerPermissions)
+                .metricsSystem(metricsSystem)
+                .supportedCapabilities(caps)
+                .natService(natService)
+                .peerDiscoveryAgentFactory(peerDiscoveryAgentFactory)
+                .rlpxAgentFactory(rlpxAgentFactory)
+                .build();
 
     final NetworkRunner networkRunner =
         NetworkRunner.builder()
@@ -812,7 +841,7 @@ public class RunnerBuilder {
               metricsConfiguration,
               graphQLConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins(),
+              besuPluginContext.getPluginsByName(),
               dataDir,
               rpcEndpointServiceImpl,
               transactionSimulator,
@@ -868,7 +897,7 @@ public class RunnerBuilder {
               metricsConfiguration,
               graphQLConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins(),
+              besuPluginContext.getPluginsByName(),
               dataDir,
               rpcEndpointServiceImpl,
               transactionSimulator,
@@ -964,7 +993,7 @@ public class RunnerBuilder {
               metricsConfiguration,
               graphQLConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins(),
+              besuPluginContext.getPluginsByName(),
               dataDir,
               rpcEndpointServiceImpl,
               transactionSimulator,
@@ -1032,7 +1061,7 @@ public class RunnerBuilder {
               metricsConfiguration,
               graphQLConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins(),
+              besuPluginContext.getPluginsByName(),
               dataDir,
               rpcEndpointServiceImpl,
               transactionSimulator,
@@ -1076,7 +1105,7 @@ public class RunnerBuilder {
               metricsConfiguration,
               graphQLConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins(),
+              besuPluginContext.getPluginsByName(),
               dataDir,
               rpcEndpointServiceImpl,
               transactionSimulator,
