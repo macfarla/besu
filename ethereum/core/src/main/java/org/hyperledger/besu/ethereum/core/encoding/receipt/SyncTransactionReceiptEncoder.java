@@ -33,9 +33,9 @@ public class SyncTransactionReceiptEncoder {
 
   public Bytes encodeForRootCalculation(final SyncTransactionReceipt receipt) {
     final boolean isFrontier =
-        !receipt.getTransactionTypeCode().isEmpty()
-            && receipt.getTransactionTypeCode().get(0)
-                == TransactionType.FRONTIER.getSerializedType();
+        receipt.getTransactionTypeCode().isEmpty()
+            || receipt.getTransactionTypeCode().get(0)
+                == TransactionType.FRONTIER.getEthSerializedType();
 
     List<Bytes> encodedLogs =
         receipt.getLogs().stream()
