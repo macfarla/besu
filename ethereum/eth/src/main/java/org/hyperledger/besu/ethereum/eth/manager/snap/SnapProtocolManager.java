@@ -124,7 +124,8 @@ public class SnapProtocolManager implements ProtocolManager {
 
     // Rate limit inbound snap requests before RLP decoding
     if (isSnapServerRequest(code) && !rateLimiter.tryAcquire(ethPeer)) {
-      LOG.trace("Rate limited snap request {} from peer {}", code, ethPeer);
+      // TODO: change to LOG.trace after initial testing
+      LOG.info("Rate limited snap request {} from peer {}", code, ethPeer);
       return;
     }
 
