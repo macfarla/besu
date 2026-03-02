@@ -21,6 +21,7 @@ import org.hyperledger.besu.ethereum.eth.manager.EthMessage;
 import org.hyperledger.besu.ethereum.eth.manager.EthMessages;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeers;
+import org.hyperledger.besu.ethereum.eth.messages.snap.SnapV1;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.SnapSyncConfiguration;
 import org.hyperledger.besu.ethereum.p2p.network.ProtocolManager;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
@@ -48,6 +49,7 @@ public class SnapProtocolManager implements ProtocolManager {
   private final List<Capability> supportedCapabilities;
   private final EthPeers ethPeers;
   private final EthMessages snapMessages;
+  private final SnapRequestRateLimiter rateLimiter;
 
   public SnapProtocolManager(
       final WorldStateStorageCoordinator worldStateStorageCoordinator,
@@ -59,6 +61,10 @@ public class SnapProtocolManager implements ProtocolManager {
     this.ethPeers = ethPeers;
     this.snapMessages = snapMessages;
     this.supportedCapabilities = calculateCapabilities();
+    this.rateLimiter =
+        new SnapRequestRateLimiter(
+            snapConfig.isSnapServerRateLimitEnabled(),
+            snapConfig.getSnapServerRateLimitPermitsPerSecond());
     new SnapServer(
         snapConfig, snapMessages, worldStateStorageCoordinator, protocolContext, synchronizer);
   }
@@ -116,6 +122,12 @@ public class SnapProtocolManager implements ProtocolManager {
     // This will handle responses
     ethPeers.dispatchMessage(ethPeer, ethMessage, getSupportedProtocol());
 
+    // Rate limit inbound snap requests before RLP decoding
+    if (isSnapServerRequest(code) && !rateLimiter.tryAcquire(ethPeer)) {
+      LOG.trace("Rate limited snap request {} from peer {}", code, ethPeer);
+      return;
+    }
+
     // This will handle requests
     Optional<MessageData> maybeResponseData = Optional.empty();
     try {
@@ -150,7 +162,16 @@ public class SnapProtocolManager implements ProtocolManager {
   public void handleDisconnect(
       final PeerConnection connection,
       final DisconnectReason reason,
-      final boolean initiatedByPeer) {}
+      final boolean initiatedByPeer) {
+    rateLimiter.removePeer(connection.getPeer().getId());
+  }
+
+  private static boolean isSnapServerRequest(final int code) {
+    return code == SnapV1.GET_ACCOUNT_RANGE
+        || code == SnapV1.GET_STORAGE_RANGE
+        || code == SnapV1.GET_BYTECODES
+        || code == SnapV1.GET_TRIE_NODES;
+  }
 
   @Override
   public int getHighestProtocolVersion() {

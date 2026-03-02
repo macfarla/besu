@@ -95,6 +95,11 @@ public class SynchronizerOptions implements CLIOptions<SynchronizerConfiguration
   private static final String SNAP_FLAT_STORAGE_HEALED_COUNT_PER_REQUEST_FLAG =
       "--Xsnapsync-synchronizer-flat-slot-healed-count-per-request";
 
+  private static final String SNAP_SERVER_RATE_LIMIT_ENABLED_FLAG =
+      "--Xsnapsync-server-rate-limit-enabled";
+  private static final String SNAP_SERVER_RATE_LIMIT_PER_SECOND_FLAG =
+      "--Xsnapsync-server-rate-limit-per-second";
+
   private static final String CHECKPOINT_POST_MERGE_FLAG = "--Xcheckpoint-post-merge-enabled";
 
   private static final String SNAP_SYNC_SAVE_PRE_CHECKPOINT_HEADERS_ONLY_FLAG =
@@ -341,6 +346,25 @@ public class SynchronizerOptions implements CLIOptions<SynchronizerConfiguration
       SnapSyncConfiguration.DEFAULT_LOCAL_FLAT_STORAGE_COUNT_TO_HEAL_PER_REQUEST;
 
   @CommandLine.Option(
+      names = SNAP_SERVER_RATE_LIMIT_ENABLED_FLAG,
+      hidden = true,
+      paramLabel = "<Boolean>",
+      arity = "0..1",
+      fallbackValue = "true",
+      description =
+          "Enable per-peer rate limiting for inbound snap server requests (default: ${DEFAULT-VALUE})")
+  private Boolean snapServerRateLimitEnabled =
+      SnapSyncConfiguration.DEFAULT_SNAP_SERVER_RATE_LIMIT_ENABLED;
+
+  @CommandLine.Option(
+      names = SNAP_SERVER_RATE_LIMIT_PER_SECOND_FLAG,
+      hidden = true,
+      paramLabel = "<DOUBLE>",
+      description = "Maximum snap server requests per second per peer (default: ${DEFAULT-VALUE})")
+  private double snapServerRateLimitPerSecond =
+      SnapSyncConfiguration.DEFAULT_SNAP_SERVER_RATE_LIMIT_PERMITS_PER_SECOND;
+
+  @CommandLine.Option(
       names = {SNAP_SERVER_ENABLED_FLAG},
       paramLabel = "<Boolean>",
       arity = "0..1",
@@ -485,6 +509,10 @@ public class SynchronizerOptions implements CLIOptions<SynchronizerConfiguration
     options.snapsyncFlatStorageHealedCountPerRequest =
         config.getSnapSyncConfiguration().getLocalFlatStorageCountToHealPerRequest();
     options.snapsyncServerEnabled = config.getSnapSyncConfiguration().isSnapServerEnabled();
+    options.snapServerRateLimitEnabled =
+        config.getSnapSyncConfiguration().isSnapServerRateLimitEnabled();
+    options.snapServerRateLimitPerSecond =
+        config.getSnapSyncConfiguration().getSnapServerRateLimitPermitsPerSecond();
     options.snapTransactionIndexingEnabled =
         config.getSnapSyncConfiguration().isSnapSyncTransactionIndexingEnabled();
     options.snapSyncSavePreCheckpointHeadersOnlyEnabled =
@@ -529,6 +557,8 @@ public class SynchronizerOptions implements CLIOptions<SynchronizerConfiguration
             .localFlatAccountCountToHealPerRequest(snapsyncFlatAccountHealedCountPerRequest)
             .localFlatStorageCountToHealPerRequest(snapsyncFlatStorageHealedCountPerRequest)
             .isSnapServerEnabled(snapsyncServerEnabled)
+            .isSnapServerRateLimitEnabled(snapServerRateLimitEnabled)
+            .snapServerRateLimitPermitsPerSecond(snapServerRateLimitPerSecond)
             .isSnapSyncTransactionIndexingEnabled(snapTransactionIndexingEnabled)
             .build());
     builder.isPeerTaskSystemEnabled(isPeerTaskSystemEnabled);
@@ -598,6 +628,10 @@ public class SynchronizerOptions implements CLIOptions<SynchronizerConfiguration
             OptionParser.format(snapsyncFlatAccountHealedCountPerRequest),
             SNAP_FLAT_STORAGE_HEALED_COUNT_PER_REQUEST_FLAG,
             OptionParser.format(snapsyncFlatStorageHealedCountPerRequest),
+            SNAP_SERVER_RATE_LIMIT_ENABLED_FLAG,
+            OptionParser.format(snapServerRateLimitEnabled),
+            SNAP_SERVER_RATE_LIMIT_PER_SECOND_FLAG,
+            OptionParser.format(snapServerRateLimitPerSecond),
             SNAP_SERVER_ENABLED_FLAG,
             OptionParser.format(snapsyncServerEnabled),
             SNAP_TRANSACTION_INDEXING_ENABLED_FLAG,
