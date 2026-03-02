@@ -2929,7 +2929,14 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     }
 
     builder
-        .setSnapServerEnabled(this.unstableSynchronizerOptions.isSnapsyncServerEnabled())
+        .setSnapServerEnabled(this.unstableSynchronizerOptions.isSnapsyncServerEnabled());
+
+    final var snapSyncConfig =
+        unstableSynchronizerOptions.toDomainObject().build().getSnapSyncConfiguration();
+    builder
+        .setSnapServerRateLimit(
+            snapSyncConfig.isSnapServerRateLimitEnabled(),
+            snapSyncConfig.getSnapServerRateLimitPermitsPerSecond())
         .setTxPoolImplementation(buildTransactionPoolConfiguration().getTxPoolImplementation())
         .setWorldStateUpdateMode(unstableEvmOptions.toDomainObject().worldUpdaterMode())
         .setEnabledOpcodeOptimizations(unstableEvmOptions.toDomainObject().enableOptimizedOpcodes())

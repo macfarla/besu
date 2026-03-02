@@ -61,6 +61,8 @@ public class ConfigurationOverviewBuilder {
   private long trieLogRetentionLimit = 0;
   private Integer trieLogsPruningWindowSize = null;
   private boolean isSnapServerEnabled = false;
+  private boolean isSnapServerRateLimitEnabled = false;
+  private double snapServerRateLimitPermitsPerSecond = 0;
   private TransactionPoolConfiguration.Implementation txPoolImplementation;
   private EvmConfiguration.WorldUpdaterMode worldStateUpdateMode;
   private boolean enabledOpcodeOptimizations;
@@ -255,6 +257,20 @@ public class ConfigurationOverviewBuilder {
    */
   public ConfigurationOverviewBuilder setSnapServerEnabled(final boolean snapServerEnabled) {
     isSnapServerEnabled = snapServerEnabled;
+    return this;
+  }
+
+  /**
+   * Sets snap server rate limit configuration
+   *
+   * @param enabled whether rate limiting is enabled
+   * @param permitsPerSecond the rate limit per peer in requests per second
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setSnapServerRateLimit(
+      final boolean enabled, final double permitsPerSecond) {
+    isSnapServerRateLimitEnabled = enabled;
+    snapServerRateLimitPermitsPerSecond = permitsPerSecond;
     return this;
   }
 
@@ -509,6 +525,14 @@ public class ConfigurationOverviewBuilder {
 
     if (isSnapServerEnabled) {
       lines.add("Snap Sync server enabled");
+      if (isSnapServerRateLimitEnabled) {
+        lines.add(
+            "Snap server rate limit: "
+                + snapServerRateLimitPermitsPerSecond
+                + " req/s per peer");
+      } else {
+        lines.add("Snap server rate limit: disabled");
+      }
     }
 
     if (isHighSpec) {
