@@ -79,7 +79,11 @@ public class SnapRequestRateLimiter {
     final AtomicLong lastLogNanos = new AtomicLong();
 
     PeerRateLimitState(final double permitsPerSecond) {
-      this.limiter = RateLimiter.create(permitsPerSecond);
+      // Create with a very high rate so Guava pre-fills stored permits,
+      // then set to the actual rate. This allows new peers a burst allowance
+      // instead of being immediately throttled on their first requests.
+      this.limiter = RateLimiter.create(Double.MAX_VALUE);
+      this.limiter.setRate(permitsPerSecond);
     }
   }
 
