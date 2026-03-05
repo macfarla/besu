@@ -102,7 +102,8 @@ public class PivotSelectorFromSafeBlock implements PivotBlockSelector {
     if (lastNoFcuReceivedInfoLog + NO_FCU_RECEIVED_LOGGING_THRESHOLD < now) {
       lastNoFcuReceivedInfoLog = now;
       LOG.info(
-          "Waiting for consensus client, this may be because your consensus client is still syncing");
+          "Waiting for consensus client, this may be because your consensus client is still syncing. Connected peers: {}",
+          ethContext.getEthPeers().peerCount());
     }
     LOG.debug("No finalized block hash announced yet");
     return CompletableFuture.failedFuture(

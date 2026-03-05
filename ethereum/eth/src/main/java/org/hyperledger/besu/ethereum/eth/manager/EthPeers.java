@@ -510,7 +510,13 @@ public class EthPeers implements PeerSelector {
   public CompletableFuture<EthPeer> waitForPeer(
       final Predicate<EthPeerImmutableAttributes> filter) {
     final CompletableFuture<EthPeer> future = new CompletableFuture<>();
-    LOG.debug("Waiting for peer matching filter. {} peers currently connected.", peerCount());
+    final int currentPeerCount = peerCount();
+    if (currentPeerCount == 0) {
+      LOG.info("Waiting for peers. No peers currently connected.");
+    } else {
+      LOG.debug(
+          "Waiting for peer matching filter. {} peers currently connected.", currentPeerCount);
+    }
     // check for an existing peer matching the filter and use that if one is found
     Optional<EthPeer> maybePeer = getPeer(filter);
     if (maybePeer.isPresent()) {

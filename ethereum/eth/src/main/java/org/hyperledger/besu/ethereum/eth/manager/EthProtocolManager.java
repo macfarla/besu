@@ -372,15 +372,17 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
       final PeerConnection connection,
       final DisconnectReason reason,
       final boolean initiatedByPeer) {
-    final boolean wasActiveConnection = ethPeers.registerDisconnect(connection);
-    LOG.atDebug()
-        .setMessage("Disconnect - active Connection? {} - {} - {} - {} {} - {} peers left")
-        .addArgument(wasActiveConnection)
-        .addArgument(initiatedByPeer ? "Inbound" : "Outbound")
+    ethPeers.registerDisconnect(connection);
+    final int remainingPeers = ethPeers.peerCount();
+    // Log at INFO when last peer disconnects to make zero-peer state visible
+    final var logLevel =
+        remainingPeers == 0 ? org.slf4j.event.Level.INFO : org.slf4j.event.Level.DEBUG;
+    LOG.atLevel(logLevel)
+        .setMessage("Disconnect - {} - {} {} - {} peers left")
         .addArgument(reason::toString)
         .addArgument(() -> connection.getPeer().getLoggableId())
         .addArgument(() -> connection.getPeerInfo().getClientId())
-        .addArgument(ethPeers::peerCount)
+        .addArgument(remainingPeers)
         .log();
     LOG.atTrace().setMessage("{}").addArgument(ethPeers::toString).log();
   }
