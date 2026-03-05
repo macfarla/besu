@@ -17,6 +17,7 @@ package org.hyperledger.besu.ethereum.eth.manager.snap;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.RateLimiter;
@@ -27,29 +28,102 @@ public class SnapRequestRateLimiter {
 
   private final boolean enabled;
   private final double permitsPerSecond;
-  private final ConcurrentHashMap<Bytes, RateLimiter> peerRateLimiters;
+  private final ConcurrentHashMap<Bytes, PeerRateLimitState> peerStates;
 
   public SnapRequestRateLimiter(final boolean enabled, final double permitsPerSecond) {
     this.enabled = enabled;
     this.permitsPerSecond = permitsPerSecond;
-    this.peerRateLimiters = new ConcurrentHashMap<>();
+    this.peerStates = new ConcurrentHashMap<>();
   }
 
-  public boolean tryAcquire(final EthPeer peer) {
+  /**
+   * Attempts to acquire a permit for the given peer.
+   *
+   * @param peer the peer making the request
+   * @return a {@link RateLimitResult} indicating whether the request was allowed
+   */
+  public RateLimitResult tryAcquire(final EthPeer peer) {
     if (!enabled) {
-      return true;
+      return RateLimitResult.ALLOWED;
     }
-    final RateLimiter limiter =
-        peerRateLimiters.computeIfAbsent(peer.getId(), k -> RateLimiter.create(permitsPerSecond));
-    return limiter.tryAcquire();
+    final PeerRateLimitState state =
+        peerStates.computeIfAbsent(peer.getId(), k -> new PeerRateLimitState(permitsPerSecond));
+    state.totalRequests.incrementAndGet();
+    if (state.limiter.tryAcquire()) {
+      return RateLimitResult.ALLOWED;
+    }
+    final long rejected = state.rejectedRequests.incrementAndGet();
+    final long total = state.totalRequests.get();
+    final long now = System.nanoTime();
+    final long lastLogNanos = state.lastLogNanos.get();
+    // throttle logging to at most once per 10 seconds per peer
+    final boolean shouldLog =
+        (now - lastLogNanos) >= 10_000_000_000L
+            && state.lastLogNanos.compareAndSet(lastLogNanos, now);
+    return new RateLimitResult(false, shouldLog, total, rejected, permitsPerSecond);
   }
 
   public void removePeer(final Bytes peerId) {
-    peerRateLimiters.remove(peerId);
+    peerStates.remove(peerId);
   }
 
   @VisibleForTesting
   int trackedPeerCount() {
-    return peerRateLimiters.size();
+    return peerStates.size();
+  }
+
+  private static class PeerRateLimitState {
+    final RateLimiter limiter;
+    final AtomicLong totalRequests = new AtomicLong();
+    final AtomicLong rejectedRequests = new AtomicLong();
+    final AtomicLong lastLogNanos = new AtomicLong();
+
+    PeerRateLimitState(final double permitsPerSecond) {
+      this.limiter = RateLimiter.create(permitsPerSecond);
+    }
+  }
+
+  /** Result of a rate limit check. */
+  public static class RateLimitResult {
+    static final RateLimitResult ALLOWED = new RateLimitResult(true, false, 0, 0, 0);
+
+    private final boolean allowed;
+    private final boolean shouldLog;
+    private final long totalRequests;
+    private final long rejectedRequests;
+    private final double configuredRate;
+
+    RateLimitResult(
+        final boolean allowed,
+        final boolean shouldLog,
+        final long totalRequests,
+        final long rejectedRequests,
+        final double configuredRate) {
+      this.allowed = allowed;
+      this.shouldLog = shouldLog;
+      this.totalRequests = totalRequests;
+      this.rejectedRequests = rejectedRequests;
+      this.configuredRate = configuredRate;
+    }
+
+    public boolean isAllowed() {
+      return allowed;
+    }
+
+    public boolean shouldLog() {
+      return shouldLog;
+    }
+
+    public long getTotalRequests() {
+      return totalRequests;
+    }
+
+    public long getRejectedRequests() {
+      return rejectedRequests;
+    }
+
+    public double getConfiguredRate() {
+      return configuredRate;
+    }
   }
 }

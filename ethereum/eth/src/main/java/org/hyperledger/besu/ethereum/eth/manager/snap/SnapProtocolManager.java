@@ -123,10 +123,20 @@ public class SnapProtocolManager implements ProtocolManager {
     ethPeers.dispatchMessage(ethPeer, ethMessage, getSupportedProtocol());
 
     // Rate limit inbound snap requests before RLP decoding
-    if (isSnapServerRequest(code) && !rateLimiter.tryAcquire(ethPeer)) {
-      // TODO: change to LOG.trace after initial testing
-      LOG.info("Rate limited snap request {} from peer {}", code, ethPeer);
-      return;
+    if (isSnapServerRequest(code)) {
+      final SnapRequestRateLimiter.RateLimitResult result = rateLimiter.tryAcquire(ethPeer);
+      if (!result.isAllowed()) {
+        if (result.shouldLog()) {
+          LOG.info(
+              "Rate limiting snap {} from peer {} (limit: {}/s, total requests: {}, rejected: {})",
+              snapMessageName(code),
+              ethPeer.getLoggableId(),
+              String.format("%.0f", result.getConfiguredRate()),
+              result.getTotalRequests(),
+              result.getRejectedRequests());
+        }
+        return;
+      }
     }
 
     // This will handle requests
@@ -172,6 +182,16 @@ public class SnapProtocolManager implements ProtocolManager {
         || code == SnapV1.GET_STORAGE_RANGE
         || code == SnapV1.GET_BYTECODES
         || code == SnapV1.GET_TRIE_NODES;
+  }
+
+  private static String snapMessageName(final int code) {
+    return switch (code) {
+      case SnapV1.GET_ACCOUNT_RANGE -> "GET_ACCOUNT_RANGE";
+      case SnapV1.GET_STORAGE_RANGE -> "GET_STORAGE_RANGE";
+      case SnapV1.GET_BYTECODES -> "GET_BYTECODES";
+      case SnapV1.GET_TRIE_NODES -> "GET_TRIE_NODES";
+      default -> "UNKNOWN(" + code + ")";
+    };
   }
 
   @Override

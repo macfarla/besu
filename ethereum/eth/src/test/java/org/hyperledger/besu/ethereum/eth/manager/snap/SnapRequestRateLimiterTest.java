@@ -40,7 +40,7 @@ class SnapRequestRateLimiterTest {
     final EthPeer peer = mockPeer(PEER_ID_1);
 
     for (int i = 0; i < 1000; i++) {
-      assertThat(limiter.tryAcquire(peer)).isTrue();
+      assertThat(limiter.tryAcquire(peer).isAllowed()).isTrue();
     }
   }
 
@@ -51,12 +51,12 @@ class SnapRequestRateLimiterTest {
     final EthPeer peer = mockPeer(PEER_ID_1);
 
     // First call always succeeds (initial permit)
-    assertThat(limiter.tryAcquire(peer)).isTrue();
+    assertThat(limiter.tryAcquire(peer).isAllowed()).isTrue();
 
     // Rapid subsequent calls should be rate limited
     boolean anyRejected = false;
     for (int i = 0; i < 10; i++) {
-      if (!limiter.tryAcquire(peer)) {
+      if (!limiter.tryAcquire(peer).isAllowed()) {
         anyRejected = true;
         break;
       }
@@ -71,10 +71,40 @@ class SnapRequestRateLimiterTest {
     final EthPeer peer2 = mockPeer(PEER_ID_2);
 
     // Exhaust peer1's permit
-    assertThat(limiter.tryAcquire(peer1)).isTrue();
+    assertThat(limiter.tryAcquire(peer1).isAllowed()).isTrue();
 
     // peer2 should still get its first permit
-    assertThat(limiter.tryAcquire(peer2)).isTrue();
+    assertThat(limiter.tryAcquire(peer2).isAllowed()).isTrue();
+  }
+
+  @Test
+  void rejectionResultIncludesStats() {
+    final SnapRequestRateLimiter limiter = new SnapRequestRateLimiter(true, 1.0);
+    final EthPeer peer = mockPeer(PEER_ID_1);
+
+    // Exhaust the initial permit
+    limiter.tryAcquire(peer);
+
+    // Next call should be rejected with stats
+    final SnapRequestRateLimiter.RateLimitResult result = limiter.tryAcquire(peer);
+    assertThat(result.isAllowed()).isFalse();
+    assertThat(result.getTotalRequests()).isGreaterThanOrEqualTo(2);
+    assertThat(result.getRejectedRequests()).isGreaterThanOrEqualTo(1);
+    assertThat(result.getConfiguredRate()).isEqualTo(1.0);
+  }
+
+  @Test
+  void firstRejectionShouldLog() {
+    final SnapRequestRateLimiter limiter = new SnapRequestRateLimiter(true, 1.0);
+    final EthPeer peer = mockPeer(PEER_ID_1);
+
+    // Exhaust permit
+    limiter.tryAcquire(peer);
+
+    // First rejection should allow logging
+    final SnapRequestRateLimiter.RateLimitResult result = limiter.tryAcquire(peer);
+    assertThat(result.isAllowed()).isFalse();
+    assertThat(result.shouldLog()).isTrue();
   }
 
   @Test
