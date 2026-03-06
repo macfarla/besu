@@ -38,8 +38,7 @@ public class SnapSyncConfiguration {
 
   public static final Boolean DEFAULT_SNAP_SERVER_ENABLED = Boolean.FALSE;
 
-  public static final Boolean DEFAULT_SNAP_SERVER_RATE_LIMIT_ENABLED = Boolean.TRUE;
-  public static final double DEFAULT_SNAP_SERVER_RATE_LIMIT_PERMITS_PER_SECOND = 500.0;
+  public static final int DEFAULT_SNAP_SERVER_MAX_CONCURRENT_REQUESTS_PER_PEER = 10;
 
   public static final Boolean DEFAULT_SNAP_SYNC_TRANSACTION_INDEXING_ENABLED = Boolean.FALSE;
   public static final Boolean DEFAULT_SNAP_SYNC_SAVE_PRE_MERGE_HEADERS_ONLY_ENABLED = Boolean.TRUE;
@@ -89,13 +88,8 @@ public class SnapSyncConfiguration {
   }
 
   @Value.Default
-  public Boolean isSnapServerRateLimitEnabled() {
-    return DEFAULT_SNAP_SERVER_RATE_LIMIT_ENABLED;
-  }
-
-  @Value.Default
-  public double getSnapServerRateLimitPermitsPerSecond() {
-    return DEFAULT_SNAP_SERVER_RATE_LIMIT_PERMITS_PER_SECOND;
+  public int getSnapServerMaxConcurrentRequestsPerPeer() {
+    return DEFAULT_SNAP_SERVER_MAX_CONCURRENT_REQUESTS_PER_PEER;
   }
 
   @Value.Default

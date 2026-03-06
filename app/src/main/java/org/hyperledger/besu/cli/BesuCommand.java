@@ -2947,15 +2947,13 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
           .ifPresent(builder::setTargetGasLimit);
     }
 
-    builder
-        .setSnapServerEnabled(this.unstableSynchronizerOptions.isSnapsyncServerEnabled());
+    builder.setSnapServerEnabled(this.unstableSynchronizerOptions.isSnapsyncServerEnabled());
 
     final var snapSyncConfig =
         unstableSynchronizerOptions.toDomainObject().build().getSnapSyncConfiguration();
     builder
-        .setSnapServerRateLimit(
-            snapSyncConfig.isSnapServerRateLimitEnabled(),
-            snapSyncConfig.getSnapServerRateLimitPermitsPerSecond())
+        .setSnapServerMaxConcurrentRequestsPerPeer(
+            snapSyncConfig.getSnapServerMaxConcurrentRequestsPerPeer())
         .setTxPoolImplementation(buildTransactionPoolConfiguration().getTxPoolImplementation())
         .setWorldStateUpdateMode(unstableEvmOptions.toDomainObject().worldUpdaterMode())
         .setEnabledOpcodeOptimizations(unstableEvmOptions.toDomainObject().enableOptimizedOpcodes())

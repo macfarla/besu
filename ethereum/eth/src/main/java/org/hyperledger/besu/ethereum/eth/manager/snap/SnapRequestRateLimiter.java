@@ -17,54 +17,81 @@ package org.hyperledger.besu.ethereum.eth.manager.snap;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.RateLimiter;
 import org.apache.tuweni.bytes.Bytes;
 
-@SuppressWarnings("UnstableApiUsage")
 public class SnapRequestRateLimiter {
 
-  private final boolean enabled;
-  private final double permitsPerSecond;
-  private final ConcurrentHashMap<Bytes, PeerRateLimitState> peerStates;
+  private final int maxConcurrentRequestsPerPeer;
+  private final ConcurrentHashMap<Bytes, PeerConcurrencyState> peerStates;
 
-  public SnapRequestRateLimiter(final boolean enabled, final double permitsPerSecond) {
-    this.enabled = enabled;
-    this.permitsPerSecond = permitsPerSecond;
+  public SnapRequestRateLimiter(final int maxConcurrentRequestsPerPeer) {
+    this.maxConcurrentRequestsPerPeer = maxConcurrentRequestsPerPeer;
     this.peerStates = new ConcurrentHashMap<>();
   }
 
   /**
-   * Attempts to acquire a permit for the given peer.
+   * Attempts to acquire a permit for the given peer. If successful, the caller MUST call {@link
+   * #release(EthPeer)} when the request is complete.
    *
    * @param peer the peer making the request
-   * @return a {@link RateLimitResult} indicating whether the request was allowed
+   * @return true if a permit was acquired, false if at the concurrency limit
    */
-  public RateLimitResult tryAcquire(final EthPeer peer) {
-    if (!enabled) {
-      return RateLimitResult.ALLOWED;
+  public boolean tryAcquire(final EthPeer peer) {
+    if (maxConcurrentRequestsPerPeer <= 0) {
+      return true; // disabled
     }
-    final PeerRateLimitState state =
-        peerStates.computeIfAbsent(peer.getId(), k -> new PeerRateLimitState(permitsPerSecond));
+    final PeerConcurrencyState state =
+        peerStates.computeIfAbsent(
+            peer.getId(), k -> new PeerConcurrencyState(maxConcurrentRequestsPerPeer));
     state.totalRequests.incrementAndGet();
-    if (state.limiter.tryAcquire()) {
-      return RateLimitResult.ALLOWED;
+    return state.semaphore.tryAcquire();
+  }
+
+  /**
+   * Releases a permit for the given peer. Must be called after a successful {@link
+   * #tryAcquire(EthPeer)}.
+   *
+   * @param peer the peer whose permit to release
+   */
+  public void release(final EthPeer peer) {
+    if (maxConcurrentRequestsPerPeer <= 0) {
+      return;
     }
-    final long rejected = state.rejectedRequests.incrementAndGet();
-    final long total = state.totalRequests.get();
+    final PeerConcurrencyState state = peerStates.get(peer.getId());
+    if (state != null) {
+      state.semaphore.release();
+    }
+  }
+
+  /**
+   * Checks whether logging should be performed for a rejected request from this peer. Throttles
+   * logging to at most once per 10 seconds per peer.
+   *
+   * @param peer the peer whose request was rejected
+   * @return true if a log message should be emitted
+   */
+  public boolean shouldLogRejection(final EthPeer peer) {
+    final PeerConcurrencyState state = peerStates.get(peer.getId());
+    if (state == null) {
+      return true;
+    }
+    state.rejectedRequests.incrementAndGet();
     final long now = System.nanoTime();
     final long lastLogNanos = state.lastLogNanos.get();
-    // throttle logging to at most once per 10 seconds per peer
-    final boolean shouldLog =
-        (now - lastLogNanos) >= 10_000_000_000L
-            && state.lastLogNanos.compareAndSet(lastLogNanos, now);
-    return new RateLimitResult(false, shouldLog, total, rejected, permitsPerSecond);
+    return (now - lastLogNanos) >= 10_000_000_000L
+        && state.lastLogNanos.compareAndSet(lastLogNanos, now);
   }
 
   public void removePeer(final Bytes peerId) {
     peerStates.remove(peerId);
+  }
+
+  public int getMaxConcurrentRequestsPerPeer() {
+    return maxConcurrentRequestsPerPeer;
   }
 
   @VisibleForTesting
@@ -72,62 +99,14 @@ public class SnapRequestRateLimiter {
     return peerStates.size();
   }
 
-  private static class PeerRateLimitState {
-    final RateLimiter limiter;
+  private static class PeerConcurrencyState {
+    final Semaphore semaphore;
     final AtomicLong totalRequests = new AtomicLong();
     final AtomicLong rejectedRequests = new AtomicLong();
     final AtomicLong lastLogNanos = new AtomicLong();
 
-    PeerRateLimitState(final double permitsPerSecond) {
-      // Create with a very high rate so Guava pre-fills stored permits,
-      // then set to the actual rate. This allows new peers a burst allowance
-      // instead of being immediately throttled on their first requests.
-      this.limiter = RateLimiter.create(Double.MAX_VALUE);
-      this.limiter.setRate(permitsPerSecond);
-    }
-  }
-
-  /** Result of a rate limit check. */
-  public static class RateLimitResult {
-    static final RateLimitResult ALLOWED = new RateLimitResult(true, false, 0, 0, 0);
-
-    private final boolean allowed;
-    private final boolean shouldLog;
-    private final long totalRequests;
-    private final long rejectedRequests;
-    private final double configuredRate;
-
-    RateLimitResult(
-        final boolean allowed,
-        final boolean shouldLog,
-        final long totalRequests,
-        final long rejectedRequests,
-        final double configuredRate) {
-      this.allowed = allowed;
-      this.shouldLog = shouldLog;
-      this.totalRequests = totalRequests;
-      this.rejectedRequests = rejectedRequests;
-      this.configuredRate = configuredRate;
-    }
-
-    public boolean isAllowed() {
-      return allowed;
-    }
-
-    public boolean shouldLog() {
-      return shouldLog;
-    }
-
-    public long getTotalRequests() {
-      return totalRequests;
-    }
-
-    public long getRejectedRequests() {
-      return rejectedRequests;
-    }
-
-    public double getConfiguredRate() {
-      return configuredRate;
+    PeerConcurrencyState(final int maxConcurrent) {
+      this.semaphore = new Semaphore(maxConcurrent);
     }
   }
 }

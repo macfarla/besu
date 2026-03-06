@@ -62,9 +62,7 @@ public class SnapProtocolManager implements ProtocolManager {
     this.snapMessages = snapMessages;
     this.supportedCapabilities = calculateCapabilities();
     this.rateLimiter =
-        new SnapRequestRateLimiter(
-            snapConfig.isSnapServerRateLimitEnabled(),
-            snapConfig.getSnapServerRateLimitPermitsPerSecond());
+        new SnapRequestRateLimiter(snapConfig.getSnapServerMaxConcurrentRequestsPerPeer());
     new SnapServer(
         snapConfig, snapMessages, worldStateStorageCoordinator, protocolContext, synchronizer);
   }
@@ -122,24 +120,34 @@ public class SnapProtocolManager implements ProtocolManager {
     // This will handle responses
     ethPeers.dispatchMessage(ethPeer, ethMessage, getSupportedProtocol());
 
-    // Rate limit inbound snap requests before RLP decoding
+    // Handle snap server requests with concurrency limiting
     if (isSnapServerRequest(code)) {
-      final SnapRequestRateLimiter.RateLimitResult result = rateLimiter.tryAcquire(ethPeer);
-      if (!result.isAllowed()) {
-        if (result.shouldLog()) {
+      if (!rateLimiter.tryAcquire(ethPeer)) {
+        if (rateLimiter.shouldLogRejection(ethPeer)) {
           LOG.info(
-              "Rate limiting snap {} from peer {} (limit: {}/s, total requests: {}, rejected: {})",
+              "Snap server busy for {} from peer {} (max concurrent: {})",
               snapMessageName(code),
               ethPeer.getLoggableId(),
-              String.format("%.0f", result.getConfiguredRate()),
-              result.getTotalRequests(),
-              result.getRejectedRequests());
+              rateLimiter.getMaxConcurrentRequestsPerPeer());
         }
         return;
       }
+      try {
+        dispatchAndRespond(ethPeer, ethMessage, messageData, cap);
+      } finally {
+        rateLimiter.release(ethPeer);
+      }
+    } else {
+      // Non-server messages (responses): dispatch without limiting
+      dispatchAndRespond(ethPeer, ethMessage, messageData, cap);
     }
+  }
 
-    // This will handle requests
+  private void dispatchAndRespond(
+      final EthPeer ethPeer,
+      final EthMessage ethMessage,
+      final MessageData messageData,
+      final Capability cap) {
     Optional<MessageData> maybeResponseData = Optional.empty();
     try {
       final Map.Entry<BigInteger, MessageData> requestIdAndEthMessage =

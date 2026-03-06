@@ -61,8 +61,7 @@ public class ConfigurationOverviewBuilder {
   private long trieLogRetentionLimit = 0;
   private Integer trieLogsPruningWindowSize = null;
   private boolean isSnapServerEnabled = false;
-  private boolean isSnapServerRateLimitEnabled = false;
-  private double snapServerRateLimitPermitsPerSecond = 0;
+  private int snapServerMaxConcurrentRequestsPerPeer = 0;
   private TransactionPoolConfiguration.Implementation txPoolImplementation;
   private EvmConfiguration.WorldUpdaterMode worldStateUpdateMode;
   private boolean enabledOpcodeOptimizations;
@@ -261,16 +260,14 @@ public class ConfigurationOverviewBuilder {
   }
 
   /**
-   * Sets snap server rate limit configuration
+   * Sets snap server max concurrent requests per peer.
    *
-   * @param enabled whether rate limiting is enabled
-   * @param permitsPerSecond the rate limit per peer in requests per second
+   * @param maxConcurrent the maximum concurrent requests per peer, 0 to disable
    * @return the builder
    */
-  public ConfigurationOverviewBuilder setSnapServerRateLimit(
-      final boolean enabled, final double permitsPerSecond) {
-    isSnapServerRateLimitEnabled = enabled;
-    snapServerRateLimitPermitsPerSecond = permitsPerSecond;
+  public ConfigurationOverviewBuilder setSnapServerMaxConcurrentRequestsPerPeer(
+      final int maxConcurrent) {
+    this.snapServerMaxConcurrentRequestsPerPeer = maxConcurrent;
     return this;
   }
 
@@ -525,13 +522,12 @@ public class ConfigurationOverviewBuilder {
 
     if (isSnapServerEnabled) {
       lines.add("Snap Sync server enabled");
-      if (isSnapServerRateLimitEnabled) {
+      if (snapServerMaxConcurrentRequestsPerPeer > 0) {
         lines.add(
-            "Snap server rate limit: "
-                + snapServerRateLimitPermitsPerSecond
-                + " req/s per peer");
+            "Snap server max concurrent requests per peer: "
+                + snapServerMaxConcurrentRequestsPerPeer);
       } else {
-        lines.add("Snap server rate limit: disabled");
+        lines.add("Snap server concurrency limit: disabled");
       }
     }
 
