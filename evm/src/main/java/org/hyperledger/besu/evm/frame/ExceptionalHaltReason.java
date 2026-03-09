@@ -105,7 +105,7 @@ public interface ExceptionalHaltReason {
     /** None default exceptional halt reason. */
     NONE(""),
     /** The Insufficient gas. */
-    INSUFFICIENT_GAS("Out of gas"),
+    INSUFFICIENT_GAS("out of gas"),
     /** The Insufficient stack items. */
     INSUFFICIENT_STACK_ITEMS("Stack underflow"),
     /** The Invalid jump destination. */

@@ -15,7 +15,7 @@
     "id": 3,
     "error": {
       "code": 3,
-      "message": "Execution reverted",
+      "message": "execution reverted",
       "data": "0x00"
     }
   },
