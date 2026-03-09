@@ -368,14 +368,14 @@ public class EthEstimateGasTest {
             null, new JsonRpcError(RpcErrorType.REVERT_ERROR, executionRevertedReason));
 
     assertThat(((JsonRpcErrorResponse) expectedResponse).getError().getMessage())
-        .isEqualTo("execution reverted (ERC20: transfer from the zero address)");
+        .isEqualTo("execution reverted: ERC20: transfer from the zero address");
 
     final JsonRpcResponse actualResponse = method.response(request);
 
     assertThat(actualResponse).usingRecursiveComparison().isEqualTo(expectedResponse);
 
     assertThat(((JsonRpcErrorResponse) actualResponse).getError().getMessage())
-        .isEqualTo("execution reverted (ERC20: transfer from the zero address)");
+        .isEqualTo("execution reverted: ERC20: transfer from the zero address");
   }
 
   @Test
@@ -396,14 +396,14 @@ public class EthEstimateGasTest {
             null, new JsonRpcError(RpcErrorType.REVERT_ERROR, invalidRevertReason));
 
     assertThat(((JsonRpcErrorResponse) expectedResponse).getError().getMessage())
-        .isEqualTo("execution reverted (ABI decode error)");
+        .isEqualTo("execution reverted: ABI decode error");
 
     final JsonRpcResponse actualResponse = method.response(request);
 
     assertThat(actualResponse).usingRecursiveComparison().isEqualTo(expectedResponse);
 
     assertThat(((JsonRpcErrorResponse) actualResponse).getError().getMessage())
-        .isEqualTo("execution reverted (ABI decode error)");
+        .isEqualTo("execution reverted: ABI decode error");
   }
 
   @Test

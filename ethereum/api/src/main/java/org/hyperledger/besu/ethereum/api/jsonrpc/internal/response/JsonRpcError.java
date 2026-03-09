@@ -74,7 +74,7 @@ public class JsonRpcError {
 
   @JsonGetter("message")
   public String getMessage() {
-    return (reason == null ? message : "%s (%s)".formatted(message, reason));
+    return (reason == null ? message : "%s: %s".formatted(message, reason));
   }
 
   @JsonGetter("data")
@@ -92,7 +92,7 @@ public class JsonRpcError {
     }
     final JsonRpcError that = (JsonRpcError) o;
     return code == that.code
-        && Objects.equals(message.split(" \\(", -1)[0], that.message.split(" \\(", -1)[0])
+        && Objects.equals(message.split(": ", 2)[0], that.message.split(": ", 2)[0])
         && Objects.equals(data, that.data);
   }
 
@@ -115,6 +115,6 @@ public class JsonRpcError {
 
   @Override
   public int hashCode() {
-    return Objects.hash(code, message.split(" \\(", -1)[0], data);
+    return Objects.hash(code, message.split(": ", 2)[0], data);
   }
 }
