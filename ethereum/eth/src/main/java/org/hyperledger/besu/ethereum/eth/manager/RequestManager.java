@@ -81,7 +81,7 @@ public class RequestManager {
               () -> peer.recordUselessResponse("Request ID incorrect"));
     } catch (final RLPException e) {
       LOG.debug(
-          "Received malformed message code={} data={} from {}, ignoring: {}",
+          "Received malformed message code={} data={} from {}, closing outstanding streams: {}",
           ethMessage.getData().getCode(),
           ethMessage.getData(),
           peer,
@@ -91,6 +91,9 @@ public class RequestManager {
       // disconnection. Persistent malformed responses will cause natural disconnection through
       // useless response accumulation.
       peer.recordUselessResponse("Malformed RLP in response");
+      // Close outstanding streams immediately so waiting tasks fail fast and can retry with a
+      // different peer, rather than waiting for a timeout.
+      closeOutstandingStreams(List.copyOf(responseStreams.values()));
     }
 
     if (outstandingRequests.get() == 0) {
