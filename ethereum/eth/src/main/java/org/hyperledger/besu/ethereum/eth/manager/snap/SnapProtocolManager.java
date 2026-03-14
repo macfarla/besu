@@ -127,12 +127,13 @@ public class SnapProtocolManager implements ProtocolManager {
               .map(responseData -> responseData.wrapMessageData(requestIdAndEthMessage.getKey()));
     } catch (final RLPException e) {
       LOG.debug(
-          "Received malformed message code={} data={} (BREACH_OF_PROTOCOL), disconnecting: {}",
+          "Received malformed snap message code={} data={} from {}, ignoring: {}",
           messageData.getCode(),
           messageData.getData(),
           ethPeer,
-          e);
-      ethPeer.disconnect(DisconnectReason.BREACH_OF_PROTOCOL_MALFORMED_MESSAGE_RECEIVED);
+          e.getMessage());
+      // Do not disconnect: the response was already dispatched above. Malformed snap messages
+      // (e.g. known off-by-one RLP encoding bugs in some clients) should not cause disconnection.
     }
     maybeResponseData.ifPresent(
         responseData -> {
