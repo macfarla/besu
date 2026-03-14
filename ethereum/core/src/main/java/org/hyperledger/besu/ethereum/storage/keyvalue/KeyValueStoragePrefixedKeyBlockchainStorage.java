@@ -39,6 +39,7 @@ import org.hyperledger.besu.ethereum.core.encoding.receipt.TransactionReceiptEnc
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.rlp.RLP;
+import org.hyperledger.besu.ethereum.rlp.RLPException;
 import org.hyperledger.besu.ethereum.rlp.SimpleNoCopyRlpEncoder;
 import org.hyperledger.besu.plugin.services.storage.KeyValueStorage;
 import org.hyperledger.besu.plugin.services.storage.KeyValueStorageTransaction;
@@ -184,7 +185,16 @@ public class KeyValueStoragePrefixedKeyBlockchainStorage implements BlockchainSt
   }
 
   private List<TransactionReceipt> rlpDecodeTransactionReceipts(final Bytes bytes) {
-    return RLP.input(bytes).readList(in -> TransactionReceiptDecoder.readFrom(in, true));
+    try {
+      return RLP.input(bytes).readList(in -> TransactionReceiptDecoder.readFrom(in, true));
+    } catch (RLPException e) {
+      LOG.warn(
+          "Failed to decode transaction receipts from storage - the stored encoding may be "
+              + "corrupt or use an unsupported format. Returning empty receipts for this block. "
+              + "A re-sync may be required to recover correct receipt data. Error: {}",
+          e.getMessage());
+      return List.of();
+    }
   }
 
   private BlockAccessList rlpDecodeBlockAccessList(final Bytes bytes) {
