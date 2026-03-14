@@ -16,7 +16,6 @@ package org.hyperledger.besu.ethereum.eth.manager;
 
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection.PeerNotConnected;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage;
 import org.hyperledger.besu.ethereum.rlp.RLPException;
 
 import java.math.BigInteger;
@@ -82,14 +81,16 @@ public class RequestManager {
               () -> peer.recordUselessResponse("Request ID incorrect"));
     } catch (final RLPException e) {
       LOG.debug(
-          "Received malformed message code={} data={} (BREACH_OF_PROTOCOL), disconnecting: {}",
+          "Received malformed message code={} data={} from {}, ignoring: {}",
           ethMessage.getData().getCode(),
           ethMessage.getData(),
           peer,
-          e);
-
-      peer.disconnect(
-          DisconnectMessage.DisconnectReason.BREACH_OF_PROTOCOL_MALFORMED_MESSAGE_RECEIVED);
+          e.getMessage());
+      // Record a useless response rather than disconnecting. Some clients have known RLP encoding
+      // bugs (e.g. Nethermind off-by-one in StorageRanges) that should not cause immediate
+      // disconnection. Persistent malformed responses will cause natural disconnection through
+      // useless response accumulation.
+      peer.recordUselessResponse("Malformed RLP in response");
     }
 
     if (outstandingRequests.get() == 0) {
