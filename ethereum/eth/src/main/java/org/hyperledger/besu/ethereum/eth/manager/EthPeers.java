@@ -644,7 +644,7 @@ public class EthPeers implements PeerSelector {
         peer.setIsServingSnap(true);
         Boolean isServer;
         try {
-          isServer = snapServerChecker.check(peer, peersHeadBlockHeader).get(6L, TimeUnit.SECONDS);
+          isServer = snapServerChecker.check(peer, peersHeadBlockHeader).get(12L, TimeUnit.SECONDS);
         } catch (Exception e) {
           LOG.atTrace()
               .setMessage("Error checking if peer {} is a snap server. Setting to false.")

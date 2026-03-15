@@ -72,6 +72,13 @@ public class SnapServerChecker {
                   .log();
               future.complete(false);
             }
+          } else {
+            LOG.atTrace()
+                .setMessage("Snap server probe for peer {} failed ({}), marking as not a snap server.")
+                .addArgument(peer::getLoggableId)
+                .addArgument(error != null ? error.getMessage() : "cancelled")
+                .log();
+            future.complete(false);
           }
         });
     return future;
@@ -79,13 +86,16 @@ public class SnapServerChecker {
 
   public CompletableFuture<AbstractPeerTask.PeerTaskResult<AccountRangeMessage.AccountRangeData>>
       getAccountRangeFromPeer(final EthPeer peer, final BlockHeader header) {
-    return GetAccountRangeFromPeerTask.forAccountRange(
+    final GetAccountRangeFromPeerTask task =
+        GetAccountRangeFromPeerTask.forAccountRange(
             ethContext,
             Bytes32.wrap(Hash.ZERO.getBytes()),
             Bytes32.wrap(Hash.ZERO.getBytes()),
             header,
-            metricsSystem)
-        .assignPeer(peer)
-        .run();
+            metricsSystem);
+    // Use a longer timeout than the default 5s: the snap server does synchronous disk I/O
+    // (trie proof generation) on the Netty event loop, which can exceed 5s on cold cache.
+    task.setTimeout(java.time.Duration.ofSeconds(10));
+    return task.assignPeer(peer).run();
   }
 }

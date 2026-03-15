@@ -72,6 +72,9 @@ public class RetryingGetAccountRangeFromPeerTask
     final GetAccountRangeFromPeerTask task =
         GetAccountRangeFromPeerTask.forAccountRange(
             ethContext, startKeyHash, endKeyHash, blockHeader, metricsSystem);
+    // Use a longer timeout than the default 5s: the snap server does synchronous disk I/O
+    // (trie proof generation) on the Netty event loop, which can exceed 5s on cold cache.
+    task.setTimeout(java.time.Duration.ofSeconds(20));
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {
