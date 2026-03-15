@@ -22,6 +22,7 @@ import org.hyperledger.besu.ethereum.eth.manager.task.AbstractRetryingSwitchingP
 import org.hyperledger.besu.ethereum.eth.manager.task.EthTask;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -38,31 +39,37 @@ public class RetryingGetBytecodeFromPeerTask
   private final List<Bytes32> codeHashes;
   private final BlockHeader blockHeader;
   private final MetricsSystem metricsSystem;
+  private final Duration requestTimeout;
 
   private RetryingGetBytecodeFromPeerTask(
       final EthContext ethContext,
       final List<Bytes32> codeHashes,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     super(ethContext, metricsSystem, Map::isEmpty, MAX_RETRIES);
     this.ethContext = ethContext;
     this.codeHashes = codeHashes;
     this.blockHeader = blockHeader;
     this.metricsSystem = metricsSystem;
+    this.requestTimeout = requestTimeout;
   }
 
   public static EthTask<Map<Bytes32, Bytes>> forByteCode(
       final EthContext ethContext,
       final List<Bytes32> codeHashes,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
-    return new RetryingGetBytecodeFromPeerTask(ethContext, codeHashes, blockHeader, metricsSystem);
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
+    return new RetryingGetBytecodeFromPeerTask(
+        ethContext, codeHashes, blockHeader, metricsSystem, requestTimeout);
   }
 
   @Override
   protected CompletableFuture<Map<Bytes32, Bytes>> executeTaskOnCurrentPeer(final EthPeer peer) {
     final GetBytecodeFromPeerTask task =
         GetBytecodeFromPeerTask.forBytecode(ethContext, codeHashes, blockHeader, metricsSystem);
+    task.setTimeout(requestTimeout);
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {

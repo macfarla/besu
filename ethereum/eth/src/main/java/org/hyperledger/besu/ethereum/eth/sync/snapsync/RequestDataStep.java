@@ -140,7 +140,8 @@ public class RequestDataStep {
             .collect(Collectors.toList());
     final EthTask<StorageRangeMessage.SlotRangeData> getStorageRangeTask =
         RetryingGetStorageRangeFromPeerTask.forStorageRange(
-            ethContext, accountHashesAsBytes32, minRange, maxRange, blockHeader, metricsSystem);
+            ethContext, accountHashesAsBytes32, minRange, maxRange, blockHeader, metricsSystem,
+            snapSyncConfiguration.getSnapServerRequestTimeout());
     downloadState.addOutstandingTask(getStorageRangeTask);
     return getStorageRangeTask
         .run()
@@ -200,7 +201,8 @@ public class RequestDataStep {
     final BlockHeader blockHeader = fastSyncState.getPivotBlockHeader().get();
     final EthTask<Map<Bytes32, Bytes>> getByteCodeTask =
         RetryingGetBytecodeFromPeerTask.forByteCode(
-            ethContext, codeHashes, blockHeader, metricsSystem);
+            ethContext, codeHashes, blockHeader, metricsSystem,
+            snapSyncConfiguration.getSnapServerRequestTimeout());
     downloadState.addOutstandingTask(getByteCodeTask);
     return getByteCodeTask
         .run()
@@ -245,7 +247,8 @@ public class RequestDataStep {
             });
     final EthTask<Map<Bytes, Bytes>> getTrieNodeFromPeerTask =
         RetryingGetTrieNodeFromPeerTask.forTrieNodes(
-            ethContext, message, blockHeader, metricsSystem);
+            ethContext, message, blockHeader, metricsSystem,
+            snapSyncConfiguration.getSnapServerRequestTimeout());
     downloadState.addOutstandingTask(getTrieNodeFromPeerTask);
     return getTrieNodeFromPeerTask
         .run()

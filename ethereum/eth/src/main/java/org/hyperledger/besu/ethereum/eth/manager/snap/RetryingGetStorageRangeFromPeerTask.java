@@ -23,6 +23,7 @@ import org.hyperledger.besu.ethereum.eth.manager.task.EthTask;
 import org.hyperledger.besu.ethereum.eth.messages.snap.StorageRangeMessage;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -39,6 +40,7 @@ public class RetryingGetStorageRangeFromPeerTask
   private final Bytes32 endKeyHash;
   private final BlockHeader blockHeader;
   private final MetricsSystem metricsSystem;
+  private final Duration requestTimeout;
 
   private RetryingGetStorageRangeFromPeerTask(
       final EthContext ethContext,
@@ -46,7 +48,8 @@ public class RetryingGetStorageRangeFromPeerTask
       final Bytes32 startKeyHash,
       final Bytes32 endKeyHash,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     super(
         ethContext,
         metricsSystem,
@@ -58,6 +61,7 @@ public class RetryingGetStorageRangeFromPeerTask
     this.endKeyHash = endKeyHash;
     this.blockHeader = blockHeader;
     this.metricsSystem = metricsSystem;
+    this.requestTimeout = requestTimeout;
   }
 
   public static EthTask<StorageRangeMessage.SlotRangeData> forStorageRange(
@@ -66,9 +70,11 @@ public class RetryingGetStorageRangeFromPeerTask
       final Bytes32 startKeyHash,
       final Bytes32 endKeyHash,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     return new RetryingGetStorageRangeFromPeerTask(
-        ethContext, accountHashes, startKeyHash, endKeyHash, blockHeader, metricsSystem);
+        ethContext, accountHashes, startKeyHash, endKeyHash, blockHeader, metricsSystem,
+        requestTimeout);
   }
 
   @Override
@@ -77,6 +83,7 @@ public class RetryingGetStorageRangeFromPeerTask
     final GetStorageRangeFromPeerTask task =
         GetStorageRangeFromPeerTask.forStorageRange(
             ethContext, accountHashes, startKeyHash, endKeyHash, blockHeader, metricsSystem);
+    task.setTimeout(requestTimeout);
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {

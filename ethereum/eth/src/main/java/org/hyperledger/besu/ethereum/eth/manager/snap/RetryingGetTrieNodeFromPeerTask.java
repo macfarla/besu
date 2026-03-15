@@ -22,6 +22,7 @@ import org.hyperledger.besu.ethereum.eth.manager.task.AbstractRetryingSwitchingP
 import org.hyperledger.besu.ethereum.eth.manager.task.EthTask;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -37,31 +38,37 @@ public class RetryingGetTrieNodeFromPeerTask
   private final Map<Bytes, List<Bytes>> paths;
   private final BlockHeader blockHeader;
   private final MetricsSystem metricsSystem;
+  private final Duration requestTimeout;
 
   private RetryingGetTrieNodeFromPeerTask(
       final EthContext ethContext,
       final Map<Bytes, List<Bytes>> paths,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     super(ethContext, metricsSystem, Map::isEmpty, MAX_RETRIES);
     this.ethContext = ethContext;
     this.paths = paths;
     this.blockHeader = blockHeader;
     this.metricsSystem = metricsSystem;
+    this.requestTimeout = requestTimeout;
   }
 
   public static EthTask<Map<Bytes, Bytes>> forTrieNodes(
       final EthContext ethContext,
       final Map<Bytes, List<Bytes>> paths,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
-    return new RetryingGetTrieNodeFromPeerTask(ethContext, paths, blockHeader, metricsSystem);
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
+    return new RetryingGetTrieNodeFromPeerTask(
+        ethContext, paths, blockHeader, metricsSystem, requestTimeout);
   }
 
   @Override
   protected CompletableFuture<Map<Bytes, Bytes>> executeTaskOnCurrentPeer(final EthPeer peer) {
     final GetTrieNodeFromPeerTask task =
         GetTrieNodeFromPeerTask.forTrieNodes(ethContext, paths, blockHeader, metricsSystem);
+    task.setTimeout(requestTimeout);
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {
