@@ -603,6 +603,12 @@ public class EthPeer implements Comparable<EthPeer> {
         .sum();
   }
 
+  public int outstandingSnapRequests() {
+    final var snapManagers = requestManagers.get(SnapProtocol.NAME);
+    if (snapManagers == null) return 0;
+    return snapManagers.values().stream().mapToInt(RequestManager::outstandingRequests).sum();
+  }
+
   public long getLastRequestTimestamp() {
     return lastRequestTimestamp;
   }

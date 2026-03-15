@@ -14,6 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 
+import java.time.Duration;
+
 import org.immutables.value.Value;
 
 @Value.Immutable
@@ -37,6 +39,11 @@ public class SnapSyncConfiguration {
       1024; // The default number of flat slots entries to verify and heal per request.
 
   public static final Boolean DEFAULT_SNAP_SERVER_ENABLED = Boolean.FALSE;
+
+  // Timeout for snap server requests (account range, storage range, bytecode, trie nodes).
+  // The snap server does synchronous disk I/O on the Netty event loop, which can take
+  // significantly longer than the default 5s task timeout on cold RocksDB cache.
+  public static final int DEFAULT_SNAP_SERVER_REQUEST_TIMEOUT_SECONDS = 60;
 
   public static final Boolean DEFAULT_SNAP_SYNC_TRANSACTION_INDEXING_ENABLED = Boolean.FALSE;
   public static final Boolean DEFAULT_SNAP_SYNC_SAVE_PRE_MERGE_HEADERS_ONLY_ENABLED = Boolean.TRUE;
@@ -88,5 +95,10 @@ public class SnapSyncConfiguration {
   @Value.Default
   public Boolean isSnapSyncTransactionIndexingEnabled() {
     return DEFAULT_SNAP_SYNC_TRANSACTION_INDEXING_ENABLED;
+  }
+
+  @Value.Default
+  public Duration getSnapServerRequestTimeout() {
+    return Duration.ofSeconds(DEFAULT_SNAP_SERVER_REQUEST_TIMEOUT_SECONDS);
   }
 }

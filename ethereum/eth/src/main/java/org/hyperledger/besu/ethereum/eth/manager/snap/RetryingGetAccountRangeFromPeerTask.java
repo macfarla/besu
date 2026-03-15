@@ -23,6 +23,7 @@ import org.hyperledger.besu.ethereum.eth.manager.task.EthTask;
 import org.hyperledger.besu.ethereum.eth.messages.snap.AccountRangeMessage;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.tuweni.bytes.Bytes32;
@@ -37,13 +38,15 @@ public class RetryingGetAccountRangeFromPeerTask
   private final Bytes32 endKeyHash;
   private final BlockHeader blockHeader;
   private final MetricsSystem metricsSystem;
+  private final Duration requestTimeout;
 
   private RetryingGetAccountRangeFromPeerTask(
       final EthContext ethContext,
       final Bytes32 startKeyHash,
       final Bytes32 endKeyHash,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     super(
         ethContext,
         metricsSystem,
@@ -54,6 +57,7 @@ public class RetryingGetAccountRangeFromPeerTask
     this.endKeyHash = endKeyHash;
     this.blockHeader = blockHeader;
     this.metricsSystem = metricsSystem;
+    this.requestTimeout = requestTimeout;
   }
 
   public static EthTask<AccountRangeMessage.AccountRangeData> forAccountRange(
@@ -61,9 +65,10 @@ public class RetryingGetAccountRangeFromPeerTask
       final Bytes32 startKeyHash,
       final Bytes32 endKeyHash,
       final BlockHeader blockHeader,
-      final MetricsSystem metricsSystem) {
+      final MetricsSystem metricsSystem,
+      final Duration requestTimeout) {
     return new RetryingGetAccountRangeFromPeerTask(
-        ethContext, startKeyHash, endKeyHash, blockHeader, metricsSystem);
+        ethContext, startKeyHash, endKeyHash, blockHeader, metricsSystem, requestTimeout);
   }
 
   @Override
@@ -72,9 +77,7 @@ public class RetryingGetAccountRangeFromPeerTask
     final GetAccountRangeFromPeerTask task =
         GetAccountRangeFromPeerTask.forAccountRange(
             ethContext, startKeyHash, endKeyHash, blockHeader, metricsSystem);
-    // Use a longer timeout than the default 5s: the snap server does synchronous disk I/O
-    // (trie proof generation) on the Netty event loop, which can exceed 5s on cold cache.
-    task.setTimeout(java.time.Duration.ofSeconds(20));
+    task.setTimeout(requestTimeout);
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {
@@ -85,6 +88,6 @@ public class RetryingGetAccountRangeFromPeerTask
 
   @Override
   protected boolean isSuitablePeer(final EthPeerImmutableAttributes peer) {
-    return peer.isServingSnap();
+    return peer.isServingSnap() && peer.outstandingSnapRequests() == 0;
   }
 }

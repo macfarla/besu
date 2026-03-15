@@ -73,6 +73,6 @@ public class RetryingGetBytecodeFromPeerTask
 
   @Override
   protected boolean isSuitablePeer(final EthPeerImmutableAttributes peer) {
-    return peer.isServingSnap();
+    return peer.isServingSnap() && peer.outstandingSnapRequests() == 0;
   }
 }

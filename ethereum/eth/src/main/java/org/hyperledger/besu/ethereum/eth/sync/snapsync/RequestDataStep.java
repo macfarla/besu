@@ -45,7 +45,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.Lists;
@@ -93,11 +92,11 @@ public class RequestDataStep {
             accountDataRequest.getStartKeyHash(),
             accountDataRequest.getEndKeyHash(),
             blockHeader,
-            metricsSystem);
+            metricsSystem,
+            snapSyncConfiguration.getSnapServerRequestTimeout());
     downloadState.addOutstandingTask(getAccountTask);
     return getAccountTask
         .run()
-        .orTimeout(10, TimeUnit.SECONDS)
         .handle(
             (response, error) -> {
               downloadState.removeOutstandingTask(getAccountTask);
@@ -145,7 +144,6 @@ public class RequestDataStep {
     downloadState.addOutstandingTask(getStorageRangeTask);
     return getStorageRangeTask
         .run()
-        .orTimeout(10, TimeUnit.SECONDS)
         .handle(
             (response, error) -> {
               downloadState.removeOutstandingTask(getStorageRangeTask);
@@ -206,7 +204,6 @@ public class RequestDataStep {
     downloadState.addOutstandingTask(getByteCodeTask);
     return getByteCodeTask
         .run()
-        .orTimeout(10, TimeUnit.SECONDS)
         .handle(
             (response, error) -> {
               downloadState.removeOutstandingTask(getByteCodeTask);
@@ -252,7 +249,6 @@ public class RequestDataStep {
     downloadState.addOutstandingTask(getTrieNodeFromPeerTask);
     return getTrieNodeFromPeerTask
         .run()
-        .orTimeout(10, TimeUnit.SECONDS)
         .handle(
             (response, error) -> {
               downloadState.removeOutstandingTask(getTrieNodeFromPeerTask);
