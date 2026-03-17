@@ -48,7 +48,6 @@ import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.BonsaiWorld
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.BonsaiWorldStateUpdateAccumulator;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
-import org.hyperledger.besu.evm.tracing.TracerAggregator;
 import org.hyperledger.besu.evm.worldstate.StackedUpdater;
 import org.hyperledger.besu.evm.worldstate.WorldState;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -158,15 +157,17 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
   }
 
   /**
-   * Creates a SlowBlockTracer if slow block logging is enabled.
+   * Creates a SlowBlockTracer wrapping the given delegate if slow block logging is enabled.
    *
    * @param protocolContext the protocol context
+   * @param delegate the tracer to delegate to after slow block processing
    * @return an Optional containing the SlowBlockTracer if enabled, empty otherwise
    */
-  private Optional<SlowBlockTracer> getSlowBlockTracer(final ProtocolContext protocolContext) {
+  private Optional<SlowBlockTracer> getSlowBlockTracer(
+      final ProtocolContext protocolContext, final OperationTracer delegate) {
     final long slowBlockThresholdMs = protocolContext.getSlowBlockThresholdMs();
     if (slowBlockThresholdMs >= 0) {
-      return Optional.of(new SlowBlockTracer(slowBlockThresholdMs));
+      return Optional.of(new SlowBlockTracer(slowBlockThresholdMs, delegate));
     }
     return Optional.empty();
   }
@@ -247,12 +248,13 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
 
     final BlockAwareOperationTracer blockTracer =
         getBlockImportTracer(protocolContext, blockHeader);
-    final Optional<SlowBlockTracer> maybeSlowBlockTracer = getSlowBlockTracer(protocolContext);
 
-    // Compose operation-level tracer: base tracer + slow block tracer (if enabled)
-    final OperationTracer operationTracer =
-        maybeSlowBlockTracer
-            .<OperationTracer>map(sbt -> TracerAggregator.of(blockTracer, sbt))
+    // Compose operation-level tracer: when slow block tracing is enabled, SlowBlockTracer wraps
+    // the block import tracer as a delegate (decorator pattern) for monomorphic JIT dispatch.
+    // When disabled, use the block import tracer directly.
+    final BlockAwareOperationTracer composedTracer =
+        getSlowBlockTracer(protocolContext, blockTracer)
+            .<BlockAwareOperationTracer>map(sbt -> sbt)
             .orElse(blockTracer);
 
     final Address miningBeneficiary = miningBeneficiaryCalculator.calculateBeneficiary(blockHeader);
@@ -260,10 +262,8 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
     LOG.trace(
         "traceStartBlock for {} using tracer {}",
         blockHeader.getNumber(),
-        blockTracer.getClass().getSimpleName());
-    blockTracer.traceStartBlock(worldState, blockHeader, miningBeneficiary);
-    maybeSlowBlockTracer.ifPresent(
-        sbt -> sbt.traceStartBlock(worldState, blockHeader, miningBeneficiary));
+        composedTracer.getClass().getSimpleName());
+    composedTracer.traceStartBlock(worldState, blockHeader, miningBeneficiary);
 
     final StateRootCommitter stateRootCommitter =
         blockProcessingMetrics.wrapStateRootCommitter(
@@ -286,7 +286,7 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
               worldState,
               protocolSpec,
               blockHashLookup,
-              operationTracer,
+              composedTracer,
               blockAccessListBuilder);
       protocolSpec
           .getPreExecutionProcessor()
@@ -569,9 +569,10 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
       }
 
       LOG.trace("traceEndBlock for {}", blockHeader.getNumber());
-      // Call SlowBlockTracer first so it can collect metrics before state cleanup
-      maybeSlowBlockTracer.ifPresent(sbt -> sbt.traceEndBlock(blockHeader, blockBody));
-      blockTracer.traceEndBlock(blockHeader, blockBody);
+      // composedTracer handles the full traceEndBlock lifecycle: SlowBlockTracer collects metrics
+      // first then delegates to the block import tracer; when absent, the block import tracer is
+      // called directly.
+      composedTracer.traceEndBlock(blockHeader, blockBody);
 
       return new BlockProcessingResult(
           Optional.of(

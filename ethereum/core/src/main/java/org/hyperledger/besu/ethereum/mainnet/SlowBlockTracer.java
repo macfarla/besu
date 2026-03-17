@@ -23,6 +23,7 @@ import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.operation.Operation.OperationResult;
 import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
+import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldView;
 import org.hyperledger.besu.plugin.data.BlockBody;
 import org.hyperledger.besu.plugin.data.BlockHeader;
@@ -57,6 +58,7 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
   private final long slowBlockThresholdMs;
+  private final OperationTracer delegate;
   private ExecutionStats executionStats;
   private EVMExecutionMetricsTracer metricsTracer;
 
@@ -68,7 +70,39 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
    *     logs all blocks.
    */
   public SlowBlockTracer(final long slowBlockThresholdMs) {
+    this(slowBlockThresholdMs, OperationTracer.NO_TRACING);
+  }
+
+  /**
+   * Creates a new SlowBlockTracer with a delegate tracer. The delegate receives all tracer calls
+   * after SlowBlockTracer has processed them, enabling a decorator/delegate chain that avoids
+   * megamorphic dispatch in the EVM hot loop.
+   *
+   * @param slowBlockThresholdMs the threshold in milliseconds beyond which blocks are logged. Zero
+   *     logs all blocks.
+   * @param delegate the tracer to delegate all calls to after processing
+   */
+  public SlowBlockTracer(final long slowBlockThresholdMs, final OperationTracer delegate) {
     this.slowBlockThresholdMs = slowBlockThresholdMs;
+    this.delegate = delegate != null ? delegate : OperationTracer.NO_TRACING;
+  }
+
+  /**
+   * Gets the delegate tracer.
+   *
+   * @return the delegate tracer, or {@link OperationTracer#NO_TRACING} if none
+   */
+  public OperationTracer getDelegate() {
+    return delegate;
+  }
+
+  /**
+   * Gets the slow block threshold in milliseconds.
+   *
+   * @return the threshold in milliseconds
+   */
+  public long getSlowBlockThresholdMs() {
+    return slowBlockThresholdMs;
   }
 
   @Override
@@ -88,6 +122,10 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
 
     // Create EVMExecutionMetricsTracer for this block
     metricsTracer = new EVMExecutionMetricsTracer();
+
+    if (delegate instanceof BlockAwareOperationTracer bat) {
+      bat.traceStartBlock(worldView, blockHeader, blockBody, miningBeneficiary);
+    }
   }
 
   @Override
@@ -106,6 +144,10 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
 
     // Create EVMExecutionMetricsTracer for this block
     metricsTracer = new EVMExecutionMetricsTracer();
+
+    if (delegate instanceof BlockAwareOperationTracer bat) {
+      bat.traceStartBlock(worldView, processableBlockHeader, miningBeneficiary);
+    }
   }
 
   @Override
@@ -120,6 +162,10 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
       final long timeNs) {
     executionStats.incrementTransactionCount();
     executionStats.addGasUsed(gasUsed);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceEndTransaction(
+          worldView, tx, status, output, logs, gasUsed, selfDestructs, timeNs);
+    }
   }
 
   @Override
@@ -141,6 +187,9 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
       ExecutionStatsHolder.clear();
       executionStats = null;
       metricsTracer = null;
+    }
+    if (delegate instanceof BlockAwareOperationTracer bat) {
+      bat.traceEndBlock(blockHeader, blockBody);
     }
   }
 
@@ -165,54 +214,84 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
   @Override
   public void tracePreExecution(final MessageFrame frame) {
     metricsTracer.tracePreExecution(frame);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.tracePreExecution(frame);
+    }
   }
 
   @Override
   public void tracePostExecution(final MessageFrame frame, final OperationResult operationResult) {
     metricsTracer.tracePostExecution(frame, operationResult);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.tracePostExecution(frame, operationResult);
+    }
   }
 
   @Override
   public void tracePrecompileCall(
       final MessageFrame frame, final long gasRequirement, final Bytes output) {
     metricsTracer.tracePrecompileCall(frame, gasRequirement, output);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.tracePrecompileCall(frame, gasRequirement, output);
+    }
   }
 
   @Override
   public void traceAccountCreationResult(
       final MessageFrame frame, final Optional<ExceptionalHaltReason> haltReason) {
     metricsTracer.traceAccountCreationResult(frame, haltReason);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceAccountCreationResult(frame, haltReason);
+    }
   }
 
   @Override
   public void tracePrepareTransaction(final WorldView worldView, final Transaction transaction) {
     metricsTracer.tracePrepareTransaction(worldView, transaction);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.tracePrepareTransaction(worldView, transaction);
+    }
   }
 
   @Override
   public void traceStartTransaction(final WorldView worldView, final Transaction transaction) {
     metricsTracer.traceStartTransaction(worldView, transaction);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceStartTransaction(worldView, transaction);
+    }
   }
 
   @Override
   public void traceBeforeRewardTransaction(
       final WorldView worldView, final Transaction tx, final Wei miningReward) {
     metricsTracer.traceBeforeRewardTransaction(worldView, tx, miningReward);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceBeforeRewardTransaction(worldView, tx, miningReward);
+    }
   }
 
   @Override
   public void traceContextEnter(final MessageFrame frame) {
     metricsTracer.traceContextEnter(frame);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceContextEnter(frame);
+    }
   }
 
   @Override
   public void traceContextReEnter(final MessageFrame frame) {
     metricsTracer.traceContextReEnter(frame);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceContextReEnter(frame);
+    }
   }
 
   @Override
   public void traceContextExit(final MessageFrame frame) {
     metricsTracer.traceContextExit(frame);
+    if (delegate != OperationTracer.NO_TRACING) {
+      delegate.traceContextExit(frame);
+    }
   }
 
   @Override
