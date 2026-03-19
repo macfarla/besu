@@ -131,7 +131,10 @@ public class GetSyncReceiptsFromPeerTask implements PeerTask<GetSyncReceiptsFrom
           paginatedReceiptsMessage.syncReceipts();
 
       if (receivedReceipts.isEmpty()) {
-        throw new InvalidPeerTaskResponseException("No result returned");
+        // Server has no receipts for these blocks (e.g. corrupt stored data).
+        // Return empty response so validateResult returns NO_RESULTS_RETURNED without
+        // penalising the peer's useless response count.
+        return new Response(Map.of(), List.of());
       }
 
       if (receivedReceipts.size() > request.size()) {
