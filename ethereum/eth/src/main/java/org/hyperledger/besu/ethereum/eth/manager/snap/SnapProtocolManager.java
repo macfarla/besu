@@ -71,7 +71,8 @@ public class SnapProtocolManager implements ProtocolManager {
     this.ethScheduler = ethScheduler;
     this.supportedCapabilities = calculateCapabilities(protocolSchedule);
     this.rateLimiter =
-        new SnapRequestRateLimiter(snapConfig.getSnapServerMaxConcurrentRequestsPerPeer());
+        new SnapRequestRateLimiter(
+            snapConfig != null ? snapConfig.getSnapServerMaxConcurrentRequestsPerPeer() : 0);
     new SnapServer(
         snapConfig, snapMessages, worldStateStorageCoordinator, protocolContext, synchronizer);
   }
@@ -176,8 +177,7 @@ public class SnapProtocolManager implements ProtocolManager {
                       decodedEthMessage.getData().unwrapMessageData();
                   maybeResponseData =
                       snapMessages
-                          .dispatch(
-                              new EthMessage(ethPeer, requestIdAndEthMessage.getValue()), cap)
+                          .dispatch(new EthMessage(ethPeer, requestIdAndEthMessage.getValue()), cap)
                           .map(
                               responseData ->
                                   responseData.wrapMessageData(requestIdAndEthMessage.getKey()));

@@ -577,7 +577,6 @@ public class ConfigurationOverviewBuilder {
       }
     }
 
-
     if (isHighSpec) {
       lines.add("Experimental high spec configuration enabled");
     }
