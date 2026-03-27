@@ -84,7 +84,7 @@ dependencies {
 
     api 'org.checkerframework:checker-qual:3.43.0'
 
-    api 'com.google.code.findbugs:jsr305:3.0.2'
+    api 'org.jspecify:jspecify:1.0.0'
 
     api 'com.google.protobuf:protobuf-java:3.25.5'
 
@@ -94,9 +94,9 @@ dependencies {
 
     api 'com.squareup.okhttp3:okhttp:4.12.0'
 
-    api 'commons-io:commons-io:2.21.0'
+    api 'com.github.seancfoley:ipaddress:5.6.1'
 
-    api 'commons-net:commons-net:3.12.0'
+    api 'commons-io:commons-io:2.21.0'
 
     api 'dnsjava:dnsjava:3.6.4'
 
@@ -149,14 +149,14 @@ dependencies {
 
     api 'org.hibernate.validator:hibernate-validator:8.0.2.Final'
 
-    api 'org.hyperledger.besu:besu-native-common:1.4.2'
-    api 'org.hyperledger.besu:arithmetic:1.4.2'
-    api 'org.hyperledger.besu:blake2bf:1.4.2'
-    api 'org.hyperledger.besu:gnark:1.4.2'
-    api 'org.hyperledger.besu:ipa-multipoint:1.4.2'
-    api 'org.hyperledger.besu:secp256k1:1.4.2'
-    api 'org.hyperledger.besu:secp256r1:1.4.2'
-    api 'org.hyperledger.besu:boringssl:1.4.2'
+    api 'org.hyperledger.besu:besu-native-common:1.5.0'
+    api 'org.hyperledger.besu:arithmetic:1.5.0'
+    api 'org.hyperledger.besu:blake2bf:1.5.0'
+    api 'org.hyperledger.besu:gnark:1.5.0'
+    api 'org.hyperledger.besu:ipa-multipoint:1.5.0'
+    api 'org.hyperledger.besu:secp256k1:1.5.0'
+    api 'org.hyperledger.besu:secp256r1:1.5.0'
+    api 'org.hyperledger.besu:boringssl:1.5.0'
     api 'org.hyperledger.besu:besu-errorprone-checks:1.2.0'
 
     api 'org.jacoco:org.jacoco.agent:0.8.14'
@@ -181,11 +181,11 @@ dependencies {
     api 'org.web3j:core:5.0.2'
     api 'org.web3j:crypto:5.0.2'
 
-    api 'org.xerial.snappy:snappy-java:1.1.10.8'
+    api 'org.xerial.snappy:snappy-java:1.1.10.7'
 
     api 'io.consensys.protocols:jc-kzg-4844:2.1.6'
 
-    api 'tech.pegasys.discovery:discovery:26.2.0'
+    api 'io.consensys.protocols:discovery:26.3.0'
   }
 }
 
@@ -209,7 +209,7 @@ publishing {
 
       pom {
         name = "Besu BOM"
-        url = 'http://github.com/hyperledger/besu'
+        url = 'https://github.com/besu-eth/besu'
         licenses {
           license {
             name = 'The Apache License, Version 2.0'
@@ -217,9 +217,9 @@ publishing {
           }
         }
         scm {
-          connection = 'scm:git:git://github.com/hyperledger/besu.git'
-          developerConnection = 'scm:git:ssh://github.com/hyperledger/besu.git'
-          url = 'https://github.com/hyperledger/besu'
+          connection = 'scm:git:git://github.com/besu-eth/besu.git'
+          developerConnection = 'scm:git:ssh://github.com/besu-eth/besu.git'
+          url = 'https://github.com/besu-eth/besu'
         }
         withXml {
           // Workaround since Gradle does not natively support adding classifiers in BOM

@@ -28,6 +28,7 @@ import org.hyperledger.besu.ethereum.p2p.discovery.PeerDiscoveryAgentFactory;
 import org.hyperledger.besu.ethereum.p2p.discovery.RlpxAgentFactory;
 import org.hyperledger.besu.ethereum.p2p.discovery.dns.DNSDaemon;
 import org.hyperledger.besu.ethereum.p2p.discovery.dns.DNSDaemonListener;
+import org.hyperledger.besu.ethereum.p2p.discovery.dns.EthereumNodeRecord;
 import org.hyperledger.besu.ethereum.p2p.peers.DefaultPeerPrivileges;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 import org.hyperledger.besu.ethereum.p2p.peers.MaintainedPeers;
@@ -43,7 +44,6 @@ import org.hyperledger.besu.ethereum.p2p.rlpx.RlpxAgent;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerLookup;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.ShouldConnectCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason;
 import org.hyperledger.besu.nat.NatMethod;
 import org.hyperledger.besu.nat.NatService;
@@ -53,6 +53,7 @@ import org.hyperledger.besu.nat.core.domain.NetworkProtocol;
 import org.hyperledger.besu.nat.upnp.UpnpNatManager;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
@@ -76,6 +77,7 @@ import io.vertx.core.Future;
 import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
 import org.apache.tuweni.bytes.Bytes;
+import org.ethereum.beacon.discovery.schema.NodeRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -336,8 +338,8 @@ public class DefaultP2PNetwork implements P2PNetwork {
   }
 
   @Override
-  public RlpxAgent getRlpxAgent() {
-    return rlpxAgent;
+  public Optional<RlpxAgent> getRlpxAgent() {
+    return Optional.of(rlpxAgent);
   }
 
   @Override
@@ -440,11 +442,6 @@ public class DefaultP2PNetwork implements P2PNetwork {
   }
 
   @Override
-  public void subscribeConnectRequest(final ShouldConnectCallback callback) {
-    rlpxAgent.subscribeConnectRequest(callback);
-  }
-
-  @Override
   public void subscribeDisconnect(final DisconnectCallback callback) {
     rlpxAgent.subscribeDisconnect(callback);
   }
@@ -510,8 +507,36 @@ public class DefaultP2PNetwork implements P2PNetwork {
             .build();
 
     LOG.info("Enode URL {}", localEnode.toString());
+    getLocalEnr().ifPresent(enr -> LOG.info("ENR URL {}", enr));
     LOG.info("Node address {}", Util.publicKeyToAddress(localEnode.getNodeId()));
     localNode.setEnode(localEnode);
+  }
+
+  @Override
+  public Optional<String> getLocalEnr() {
+    return peerDiscoveryAgent.getLocalNodeRecord().map(NodeRecord::asEnr);
+  }
+
+  @Override
+  public Optional<IPv6AddressInfo> getIPv6AddressInfo() {
+    try {
+      return peerDiscoveryAgent
+          .getLocalNodeRecord()
+          .map(EthereumNodeRecord::fromNodeRecord)
+          .flatMap(
+              enr ->
+                  enr.getIpV6Address()
+                      .map(InetAddress::getHostAddress)
+                      .map(
+                          addr ->
+                              new IPv6AddressInfo(
+                                  addr,
+                                  enr.getIpV6TcpListeningPort(),
+                                  enr.getIpV6UdpDiscoveryPort())));
+    } catch (final IllegalArgumentException e) {
+      LOG.debug("Failed to parse local Ethereum Node Record; IPv6 fields will be unavailable", e);
+      return Optional.empty();
+    }
   }
 
   @Override
