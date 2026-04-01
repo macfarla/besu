@@ -26,6 +26,7 @@ import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.sync.common.WorldStateHealFinishedListener;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePersistenceManager;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.AccountRangeDataRequest;
+import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.BlockAccessListDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.BytecodeRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.StorageRangeDataRequest;
@@ -35,12 +36,12 @@ import org.hyperledger.besu.ethereum.eth.sync.worldstate.WorldDownloadState;
 import org.hyperledger.besu.ethereum.trie.RangeManager;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.BonsaiWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.worldstate.FlatDbMode;
-import org.hyperledger.besu.ethereum.worldstate.WorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorageCoordinator;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
 import org.hyperledger.besu.metrics.SyncDurationMetrics;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.storage.DataStorageFormat;
+import org.hyperledger.besu.plugin.services.storage.WorldStateKeyValueStorage;
 import org.hyperledger.besu.services.tasks.InMemoryTaskQueue;
 import org.hyperledger.besu.services.tasks.InMemoryTasksPriorityQueues;
 import org.hyperledger.besu.services.tasks.Task;
@@ -73,6 +74,8 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
   protected final InMemoryTaskQueue<SnapDataRequest> pendingLargeStorageRequests =
       new InMemoryTaskQueue<>();
   protected final InMemoryTaskQueue<SnapDataRequest> pendingCodeRequests =
+      new InMemoryTaskQueue<>();
+  protected final InMemoryTaskQueue<SnapDataRequest> pendingBlockAccessListRequests =
       new InMemoryTaskQueue<>();
   protected final InMemoryTasksPriorityQueues<SnapDataRequest> pendingTrieNodeRequests =
       new InMemoryTasksPriorityQueues<>();
@@ -149,6 +152,11 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
         pendingCodeRequests::size);
     metricsSystem.createLongGauge(
         BesuMetricCategory.SYNCHRONIZER,
+        "snap_world_state_pending_block_access_list_requests_current",
+        "Number of block access list pending requests for snap sync world state download",
+        pendingBlockAccessListRequests::size);
+    metricsSystem.createLongGauge(
+        BesuMetricCategory.SYNCHRONIZER,
         "snap_world_state_pending_trie_node_requests_current",
         "Number of trie node pending requests for snap sync world state download",
         pendingTrieNodeRequests::size);
@@ -168,6 +176,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
     if (!internalFuture.isDone()
         && pendingAccountRequests.allTasksCompleted()
         && pendingCodeRequests.allTasksCompleted()
+        && pendingBlockAccessListRequests.allTasksCompleted()
         && pendingStorageRequests.allTasksCompleted()
         && pendingLargeStorageRequests.allTasksCompleted()
         && pendingTrieNodeRequests.allTasksCompleted()
@@ -269,6 +278,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
     pendingStorageRequests.clear();
     pendingLargeStorageRequests.clear();
     pendingCodeRequests.clear();
+    pendingBlockAccessListRequests.clear();
     pendingTrieNodeRequests.clear();
   }
 
@@ -338,6 +348,8 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
         }
       } else if (request instanceof AccountRangeDataRequest) {
         pendingAccountRequests.add(request);
+      } else if (request instanceof BlockAccessListDataRequest) {
+        pendingBlockAccessListRequests.add(request);
       } else if (request instanceof AccountFlatDatabaseHealingRangeRequest) {
         pendingAccountFlatDatabaseHealingRequests.add(request);
       } else if (request instanceof StorageFlatDatabaseHealingRangeRequest) {
@@ -435,8 +447,19 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
 
   public synchronized Task<SnapDataRequest> dequeueTrieNodeRequestBlocking() {
     return dequeueRequestBlocking(
-        List.of(pendingAccountRequests, pendingStorageRequests, pendingLargeStorageRequests),
+        List.of(
+            pendingAccountRequests,
+            pendingStorageRequests,
+            pendingLargeStorageRequests,
+            pendingBlockAccessListRequests),
         pendingTrieNodeRequests,
+        __ -> {});
+  }
+
+  public synchronized Task<SnapDataRequest> dequeueBlockAccessListRequestBlocking() {
+    return dequeueRequestBlocking(
+        List.of(pendingStorageRequests, pendingLargeStorageRequests, pendingCodeRequests),
+        pendingBlockAccessListRequests,
         __ -> {});
   }
 
@@ -446,6 +469,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
             pendingAccountRequests,
             pendingStorageRequests,
             pendingLargeStorageRequests,
+            pendingBlockAccessListRequests,
             pendingTrieNodeRequests,
             pendingStorageFlatDatabaseHealingRequests),
         pendingAccountFlatDatabaseHealingRequests,
@@ -458,6 +482,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
             pendingAccountRequests,
             pendingStorageRequests,
             pendingLargeStorageRequests,
+            pendingBlockAccessListRequests,
             pendingTrieNodeRequests),
         pendingStorageFlatDatabaseHealingRequests,
         __ -> {});
