@@ -1561,10 +1561,15 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     validateDataStorageOptions();
     validateGraphQlOptions();
     validatePluginOptions();
+    validateUnstableNetworkingOptions();
   }
 
   private void validatePluginOptions() {
     pluginsConfigurationOptions.validate(commandLine);
+  }
+
+  private void validateUnstableNetworkingOptions() {
+    unstableNetworkingOptions.validate(commandLine);
   }
 
   private void validateApiOptions() {
@@ -2992,6 +2997,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
         .setTxPoolImplementation(buildTransactionPoolConfiguration().getTxPoolImplementation())
         .setWorldStateUpdateMode(unstableEvmOptions.toDomainObject().worldUpdaterMode())
         .setEnabledOpcodeOptimizations(unstableEvmOptions.toDomainObject().enableOptimizedOpcodes())
+        .setEvmV2(unstableEvmOptions.toDomainObject().enableEvmV2())
         .setPluginContext(this.besuPluginContext)
         .setHistoryExpiryPruneEnabled(getDataStorageConfiguration().getHistoryExpiryPruneEnabled())
         .setBlobDBSettings(rocksDBPlugin.getBlobDBSettings());

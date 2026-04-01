@@ -410,6 +410,9 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
         .addArgument(() -> connection.getPeerInfo().getClientId())
         .addArgument(remainingPeers)
         .log();
+    if (initiatedByPeer && reason.isBreachOfProtocol()) {
+      BreachOfProtocolLogger.log(connection, reason);
+    }
     LOG.atTrace().setMessage("{}").addArgument(ethPeers::toString).log();
   }
 
