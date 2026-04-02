@@ -108,7 +108,7 @@ public class DebugTraceTransactionTest {
   @Test
   public void shouldTraceTheTransactionUsingTheTransactionTracer() {
     final TransactionWithMetadata transactionWithMetadata =
-        new TransactionWithMetadata(transaction, 12L, Optional.empty(), blockHash, 2);
+        new TransactionWithMetadata(transaction, 12L, Optional.empty(), blockHash, 2, 0L);
     final Map<String, Boolean> map = new HashMap<>();
     map.put("disableStorage", true);
     final Object[] params = new Object[] {transactionHash, map};
@@ -167,7 +167,7 @@ public class DebugTraceTransactionTest {
         (OpCodeLoggerTracerResult) response.getResult();
 
     assertThat(transactionResult.getGas()).isEqualTo(73);
-    assertThat(transactionResult.getReturnValue()).isEqualTo("1234");
+    assertThat(transactionResult.getReturnValue()).isEqualTo("0x1234");
     final List<StructLog> expectedStructLogs = Collections.singletonList(new StructLog(traceFrame));
     assertThat(transactionResult.getStructLogs()).isEqualTo(expectedStructLogs);
     assertThat(transactionResult.getStructLogs().size()).isEqualTo(1);
@@ -176,7 +176,7 @@ public class DebugTraceTransactionTest {
         .isEqualTo(StructLog.toCompactHex(stackBytes[0], true));
     assertThat(transactionResult.getStructLogs().get(0).memory().length).isEqualTo(1);
     assertThat(transactionResult.getStructLogs().get(0).memory()[0])
-        .isEqualTo(StructLog.toCompactHex(memoryBytes[0], true));
+        .isEqualTo(StructLog.toBytes32Hex(memoryBytes[0]));
   }
 
   @Test

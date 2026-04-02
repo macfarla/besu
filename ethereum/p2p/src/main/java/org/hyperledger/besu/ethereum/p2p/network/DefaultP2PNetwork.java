@@ -19,6 +19,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import org.hyperledger.besu.cryptoservices.NodeKey;
 import org.hyperledger.besu.ethereum.core.Util;
+import org.hyperledger.besu.ethereum.p2p.config.DiscoveryConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.discovery.DiscoveryPeer;
 import org.hyperledger.besu.ethereum.p2p.discovery.DiscoveryPeerFactory;
@@ -27,6 +28,7 @@ import org.hyperledger.besu.ethereum.p2p.discovery.PeerDiscoveryAgentFactory;
 import org.hyperledger.besu.ethereum.p2p.discovery.RlpxAgentFactory;
 import org.hyperledger.besu.ethereum.p2p.discovery.dns.DNSDaemon;
 import org.hyperledger.besu.ethereum.p2p.discovery.dns.DNSDaemonListener;
+import org.hyperledger.besu.ethereum.p2p.discovery.dns.EthereumNodeRecord;
 import org.hyperledger.besu.ethereum.p2p.peers.DefaultPeerPrivileges;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 import org.hyperledger.besu.ethereum.p2p.peers.MaintainedPeers;
@@ -42,7 +44,6 @@ import org.hyperledger.besu.ethereum.p2p.rlpx.RlpxAgent;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerLookup;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
-import org.hyperledger.besu.ethereum.p2p.rlpx.wire.ShouldConnectCallback;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason;
 import org.hyperledger.besu.nat.NatMethod;
 import org.hyperledger.besu.nat.NatService;
@@ -50,9 +51,9 @@ import org.hyperledger.besu.nat.core.NatManager;
 import org.hyperledger.besu.nat.core.domain.NatServiceType;
 import org.hyperledger.besu.nat.core.domain.NetworkProtocol;
 import org.hyperledger.besu.nat.upnp.UpnpNatManager;
-import org.hyperledger.besu.plugin.data.EnodeURL;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
@@ -76,6 +77,7 @@ import io.vertx.core.Future;
 import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
 import org.apache.tuweni.bytes.Bytes;
+import org.ethereum.beacon.discovery.schema.NodeRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,12 +203,13 @@ public class DefaultP2PNetwork implements P2PNetwork {
     }
 
     if (config.discoveryConfiguration().isDiscoveryV5Enabled()) {
-      LOG.warn("Discovery Protocol v5 is not available");
+      LOG.warn(
+          "Discovery Protocol v5 is enabled via --Xv5-discovery-enabled. This is an experimental feature and may not be fully stable.");
+    } else {
+      warnIfIpv6OptionsWithDiscV4();
     }
 
     final String address = config.discoveryConfiguration().getAdvertisedHost();
-    final int configuredDiscoveryPort = config.discoveryConfiguration().getBindPort();
-    final int configuredRlpxPort = config.rlpxConfiguration().getBindPort();
 
     Optional.ofNullable(config.discoveryConfiguration().getDNSDiscoveryURL())
         .ifPresent(
@@ -242,14 +245,32 @@ public class DefaultP2PNetwork implements P2PNetwork {
               dnsDaemonRef.set(Optional.of(dnsDaemon));
             });
 
-    final int listeningPort = rlpxAgent.start().join();
-    final int discoveryPort =
-        peerDiscoveryAgent
-            .start(
-                (configuredDiscoveryPort == 0 && configuredRlpxPort == 0)
-                    ? listeningPort
-                    : configuredDiscoveryPort)
-            .join();
+    final int listeningPort;
+    try {
+      listeningPort = rlpxAgent.start().join();
+    } catch (final Exception e) {
+      LOG.error("Failed to start RLPx agent", e);
+      // Discovery agent will not be started, count down its latch position
+      shutdownLatch.countDown();
+      // Ensure any partially started RLPx agent is stopped and count down its latch position
+      rlpxAgent.stop().whenComplete((res, err) -> shutdownLatch.countDown());
+      throw e;
+    }
+
+    // Pass the effective RLPx TCP port so that the discovery agent can write the correct tcp/tcp6
+    // values into the local ENR.  The discovery agent reads its own UDP bind port independently.
+    final int discoveryPort;
+    try {
+      discoveryPort = peerDiscoveryAgent.start(listeningPort).join();
+    } catch (final Exception e) {
+      LOG.error("Failed to start peer discovery agent", e);
+      // Stop the partially-started discovery agent and count down its latch position on completion
+      peerDiscoveryAgent.stop().whenComplete((r, err) -> shutdownLatch.countDown());
+      // Stop the already-started RLPx agent and count down the remaining latch position on
+      // completion
+      rlpxAgent.stop().whenComplete((res, err) -> shutdownLatch.countDown());
+      throw e;
+    }
 
     final Consumer<? super NatManager> natAction =
         natManager -> {
@@ -301,12 +322,12 @@ public class DefaultP2PNetwork implements P2PNetwork {
   public void awaitStop() {
     try {
       if (!peerConnectionScheduler.awaitTermination(
-          shutdownTimeout.getSeconds(), TimeUnit.SECONDS)) {
+          shutdownTimeout.toSeconds(), TimeUnit.SECONDS)) {
         LOG.error(
             "{} did not shutdown cleanly: peerConnectionScheduler executor did not fully terminate.",
             this.getClass().getSimpleName());
       }
-      if (!shutdownLatch.await(shutdownTimeout.getSeconds(), TimeUnit.SECONDS)) {
+      if (!shutdownLatch.await(shutdownTimeout.toSeconds(), TimeUnit.SECONDS)) {
         LOG.error(
             "{} did not shutdown cleanly: some internal services failed to fully terminate.",
             this.getClass().getSimpleName());
@@ -317,8 +338,8 @@ public class DefaultP2PNetwork implements P2PNetwork {
   }
 
   @Override
-  public RlpxAgent getRlpxAgent() {
-    return rlpxAgent;
+  public Optional<RlpxAgent> getRlpxAgent() {
+    return Optional.of(rlpxAgent);
   }
 
   @Override
@@ -421,11 +442,6 @@ public class DefaultP2PNetwork implements P2PNetwork {
   }
 
   @Override
-  public void subscribeConnectRequest(final ShouldConnectCallback callback) {
-    rlpxAgent.subscribeConnectRequest(callback);
-  }
-
-  @Override
   public void subscribeDisconnect(final DisconnectCallback callback) {
     rlpxAgent.subscribeDisconnect(callback);
   }
@@ -456,11 +472,20 @@ public class DefaultP2PNetwork implements P2PNetwork {
   }
 
   @Override
-  public Optional<EnodeURL> getLocalEnode() {
+  public Optional<EnodeURLImpl> getLocalEnode() {
     if (!localNode.isReady()) {
       return Optional.empty();
     }
     return Optional.of(localNode.getPeer().getEnodeURL());
+  }
+
+  private void warnIfIpv6OptionsWithDiscV4() {
+    final DiscoveryConfiguration disc = config.discoveryConfiguration();
+    if (disc.getAdvertisedHostIpv6().isPresent() || disc.isDualStackEnabled()) {
+      LOG.warn(
+          "--p2p-host-ipv6 and --p2p-interface-ipv6 are only supported with DiscV5 "
+              + "(--Xv5-discovery-enabled). These options are ignored by DiscV4.");
+    }
   }
 
   private void setLocalNode(
@@ -473,7 +498,7 @@ public class DefaultP2PNetwork implements P2PNetwork {
     // override advertised host if we detect an external IP address via NAT manager
     final String advertisedAddress = natService.queryExternalIPAddress(address);
 
-    final EnodeURL localEnode =
+    final EnodeURLImpl localEnode =
         EnodeURLImpl.builder()
             .nodeId(nodeId)
             .ipAddress(advertisedAddress)
@@ -482,8 +507,36 @@ public class DefaultP2PNetwork implements P2PNetwork {
             .build();
 
     LOG.info("Enode URL {}", localEnode.toString());
+    getLocalEnr().ifPresent(enr -> LOG.info("ENR URL {}", enr));
     LOG.info("Node address {}", Util.publicKeyToAddress(localEnode.getNodeId()));
     localNode.setEnode(localEnode);
+  }
+
+  @Override
+  public Optional<String> getLocalEnr() {
+    return peerDiscoveryAgent.getLocalNodeRecord().map(NodeRecord::asEnr);
+  }
+
+  @Override
+  public Optional<IPv6AddressInfo> getIPv6AddressInfo() {
+    try {
+      return peerDiscoveryAgent
+          .getLocalNodeRecord()
+          .map(EthereumNodeRecord::fromNodeRecord)
+          .flatMap(
+              enr ->
+                  enr.getIpV6Address()
+                      .map(InetAddress::getHostAddress)
+                      .map(
+                          addr ->
+                              new IPv6AddressInfo(
+                                  addr,
+                                  enr.getIpV6TcpListeningPort(),
+                                  enr.getIpV6UdpDiscoveryPort())));
+    } catch (final IllegalArgumentException e) {
+      LOG.debug("Failed to parse local Ethereum Node Record; IPv6 fields will be unavailable", e);
+      return Optional.empty();
+    }
   }
 
   @Override

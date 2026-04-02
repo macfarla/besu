@@ -104,7 +104,7 @@ public class MainnetTransactionValidator implements TransactionValidator {
               transactionType, acceptedTransactionTypes));
     }
 
-    if (transaction.getNonce() == MAX_NONCE) {
+    if (!transactionValidationParams.isAllowFutureNonce() && transaction.getNonce() == MAX_NONCE) {
       return ValidationResult.invalid(
           TransactionInvalidReason.NONCE_OVERFLOW, "Nonce must be less than 2^64-1");
     }
@@ -208,6 +208,7 @@ public class MainnetTransactionValidator implements TransactionValidator {
     if (maybeBaseFee.isPresent()) {
       final Wei price = feeMarket.getTransactionPriceCalculator().price(transaction, maybeBaseFee);
       if (!transactionValidationParams.allowUnderpriced()
+          && !transactionValidationParams.isPreserveCallerGasPricing()
           && price.compareTo(maybeBaseFee.orElseThrow()) < 0) {
         return ValidationResult.invalid(
             TransactionInvalidReason.GAS_PRICE_BELOW_CURRENT_BASE_FEE,

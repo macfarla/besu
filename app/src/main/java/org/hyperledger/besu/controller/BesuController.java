@@ -360,6 +360,13 @@ public class BesuController implements java.io.Closeable {
       } else if (configOptions.isQbft()) {
         builder = new QbftBesuControllerBuilder();
       } else if (configOptions.isClique()) {
+        if (configOptions.getTerminalTotalDifficulty().isEmpty()) {
+          throw new IllegalStateException(
+              """
+                 Clique Block Production (mining) is no longer supported.
+                 It is still possible to sync existing Clique networks if they are migrated to PoS.
+                 """);
+        }
         builder = new CliqueBesuControllerBuilder();
       } else {
         throw new IllegalArgumentException("Unknown consensus mechanism defined");
@@ -368,7 +375,7 @@ public class BesuController implements java.io.Closeable {
       // wrap with TransitionBesuControllerBuilder if we have a terminal total difficulty:
       if (configOptions.getTerminalTotalDifficulty().isPresent()) {
         // Enable start with vanilla MergeBesuControllerBuilder for PoS checkpoint block
-        if (syncMode == SyncMode.CHECKPOINT && isCheckpointPoSBlock(configOptions)) {
+        if (syncMode == SyncMode.SNAP && isCheckpointPoSBlock(configOptions)) {
           return new MergeBesuControllerBuilder().genesisConfig(genesisConfig);
         } else {
           // TODO this should be changed to vanilla MergeBesuControllerBuilder and the Transition*
