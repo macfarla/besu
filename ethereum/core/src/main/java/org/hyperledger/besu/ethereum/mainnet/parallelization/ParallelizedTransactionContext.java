@@ -15,6 +15,7 @@
 package org.hyperledger.besu.ethereum.mainnet.parallelization;
 
 import org.hyperledger.besu.datatypes.Wei;
+import org.hyperledger.besu.ethereum.mainnet.ExecutionStats;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.accumulator.PathBasedWorldStateUpdateAccumulator;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
@@ -28,19 +29,22 @@ public final class ParallelizedTransactionContext {
   private final boolean isMiningBeneficiaryTouchedPreRewardByTransaction;
   private final Wei miningBeneficiaryReward;
   private final Optional<OperationTracer> backgroundTracer;
+  private final Optional<ExecutionStats> workerExecutionStats;
 
   public ParallelizedTransactionContext(
       final PathBasedWorldStateUpdateAccumulator<?> transactionAccumulator,
       final TransactionProcessingResult transactionProcessingResult,
       final boolean isMiningBeneficiaryTouchedPreRewardByTransaction,
       final Wei miningBeneficiaryReward,
-      final Optional<OperationTracer> backgroundTracer) {
+      final Optional<OperationTracer> backgroundTracer,
+      final Optional<ExecutionStats> workerExecutionStats) {
     this.transactionAccumulator = transactionAccumulator;
     this.transactionProcessingResult = transactionProcessingResult;
     this.isMiningBeneficiaryTouchedPreRewardByTransaction =
         isMiningBeneficiaryTouchedPreRewardByTransaction;
     this.miningBeneficiaryReward = miningBeneficiaryReward;
     this.backgroundTracer = backgroundTracer;
+    this.workerExecutionStats = workerExecutionStats;
   }
 
   public PathBasedWorldStateUpdateAccumulator<?> transactionAccumulator() {
@@ -63,6 +67,10 @@ public final class ParallelizedTransactionContext {
     return backgroundTracer;
   }
 
+  public Optional<ExecutionStats> workerExecutionStats() {
+    return workerExecutionStats;
+  }
+
   @Override
   public boolean equals(final Object obj) {
     if (obj == this) return true;
@@ -73,7 +81,8 @@ public final class ParallelizedTransactionContext {
         && this.isMiningBeneficiaryTouchedPreRewardByTransaction
             == that.isMiningBeneficiaryTouchedPreRewardByTransaction
         && Objects.equals(this.miningBeneficiaryReward, that.miningBeneficiaryReward)
-        && Objects.equals(this.backgroundTracer, that.backgroundTracer);
+        && Objects.equals(this.backgroundTracer, that.backgroundTracer)
+        && Objects.equals(this.workerExecutionStats, that.workerExecutionStats);
   }
 
   @Override
@@ -83,7 +92,8 @@ public final class ParallelizedTransactionContext {
         transactionProcessingResult,
         isMiningBeneficiaryTouchedPreRewardByTransaction,
         miningBeneficiaryReward,
-        backgroundTracer);
+        backgroundTracer,
+        workerExecutionStats);
   }
 
   @Override
@@ -103,6 +113,9 @@ public final class ParallelizedTransactionContext {
         + ", "
         + "backgroundTracer="
         + backgroundTracer
+        + ", "
+        + "workerExecutionStats="
+        + workerExecutionStats
         + ']';
   }
 
@@ -116,6 +129,7 @@ public final class ParallelizedTransactionContext {
     private boolean isMiningBeneficiaryTouchedPreRewardByTransaction;
     private Wei miningBeneficiaryReward = Wei.ZERO;
     private Optional<OperationTracer> backgroundTracer = Optional.empty();
+    private Optional<ExecutionStats> workerExecutionStats = Optional.empty();
 
     public Builder transactionAccumulator(
         final PathBasedWorldStateUpdateAccumulator<?> transactionAccumulator) {
@@ -146,13 +160,19 @@ public final class ParallelizedTransactionContext {
       return this;
     }
 
+    public Builder workerExecutionStats(final ExecutionStats workerExecutionStats) {
+      this.workerExecutionStats = Optional.ofNullable(workerExecutionStats);
+      return this;
+    }
+
     public ParallelizedTransactionContext build() {
       return new ParallelizedTransactionContext(
           transactionAccumulator,
           transactionProcessingResult,
           isMiningBeneficiaryTouchedPreRewardByTransaction,
           miningBeneficiaryReward,
-          backgroundTracer);
+          backgroundTracer,
+          workerExecutionStats);
     }
   }
 }

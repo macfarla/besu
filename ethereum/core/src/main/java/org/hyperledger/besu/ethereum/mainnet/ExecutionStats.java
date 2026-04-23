@@ -328,6 +328,35 @@ public class ExecutionStats implements StateMetricsCollector {
   }
 
   /**
+   * Merges state-layer metrics from a parallel worker's ExecutionStats into this block-level stats.
+   * Called during parallel execution consolidation after a conflict-free transaction. Does NOT
+   * merge timing fields (they overlap with parallel execution) or transaction count (handled
+   * separately).
+   *
+   * @param other the worker ExecutionStats to merge from
+   */
+  public void mergeStateCountsFrom(final ExecutionStats other) {
+    this.accountReads += other.accountReads;
+    this.storageReads += other.storageReads;
+    this.codeReads += other.codeReads;
+    this.codeBytesRead += other.codeBytesRead;
+    this.accountWrites += other.accountWrites;
+    this.storageWrites += other.storageWrites;
+    this.codeWrites += other.codeWrites;
+    this.codeBytesWritten += other.codeBytesWritten;
+    this.accountCreates += other.accountCreates;
+    this.accountDestructs += other.accountDestructs;
+    this.eip7702DelegationsSet += other.eip7702DelegationsSet;
+    this.eip7702DelegationsCleared += other.eip7702DelegationsCleared;
+    this.accountCacheHits += other.accountCacheHits;
+    this.accountCacheMisses += other.accountCacheMisses;
+    this.storageCacheHits += other.storageCacheHits;
+    this.storageCacheMisses += other.storageCacheMisses;
+    this.codeCacheHits += other.codeCacheHits;
+    this.codeCacheMisses += other.codeCacheMisses;
+  }
+
+  /**
    * Merges EVM operation counts from a background EVMExecutionMetricsTracer into this stats object.
    * Used during parallel execution consolidation to add per-transaction worker metrics into the
    * block-level stats.
