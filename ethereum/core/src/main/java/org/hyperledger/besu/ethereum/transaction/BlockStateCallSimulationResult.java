@@ -21,6 +21,7 @@ import org.hyperledger.besu.ethereum.core.TransactionReceipt;
 import org.hyperledger.besu.ethereum.mainnet.AbstractBlockProcessor;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
+import org.hyperledger.besu.ethereum.mainnet.parallelization.CompositeOperationTracer;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
 import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
 import org.hyperledger.besu.evm.tracing.EthTransferLogOperationTracer;
@@ -92,9 +93,9 @@ public class BlockStateCallSimulationResult {
             result.transaction().getType(), result.result(), worldState, cumulativeGasUsed);
 
     List<Log> logs =
-        (operationTracer instanceof EthTransferLogOperationTracer)
-            ? ((EthTransferLogOperationTracer) operationTracer).getLogs()
-            : transactionReceipt.getLogsList();
+        CompositeOperationTracer.findTracer(operationTracer, EthTransferLogOperationTracer.class)
+            .map(EthTransferLogOperationTracer::getLogs)
+            .orElseGet(transactionReceipt::getLogsList);
 
     transactionSimulatorResults.add(
         new TransactionSimulatorResultWithMetadata(

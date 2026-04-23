@@ -133,4 +133,27 @@ public class CompositeOperationTracer implements OperationTracer {
     }
     return false;
   }
+
+  /**
+   * Returns the first child of {@code tracerType} from {@code tracer}, or the tracer itself if it
+   * matches. Returns {@link Optional#empty()} when no match is found.
+   *
+   * @param tracer the tracer to inspect
+   * @param tracerType the type to look for
+   * @param <T> the tracer type
+   * @return an {@link Optional} containing the matched tracer, or empty
+   */
+  public static <T extends OperationTracer> Optional<T> findTracer(
+      final OperationTracer tracer, final Class<T> tracerType) {
+    if (tracerType.isInstance(tracer)) {
+      return Optional.of(tracerType.cast(tracer));
+    }
+    if (tracer instanceof CompositeOperationTracer composite) {
+      return composite.tracers.stream()
+          .filter(tracerType::isInstance)
+          .map(tracerType::cast)
+          .findFirst();
+    }
+    return Optional.empty();
+  }
 }

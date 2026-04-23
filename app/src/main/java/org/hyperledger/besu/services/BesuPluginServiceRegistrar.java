@@ -149,6 +149,8 @@ public final class BesuPluginServiceRegistrar {
    * @param runner the fully built runner (provides P2P network and in-process RPC)
    * @param metricsSystem the fully configured metrics system
    * @param miningConfiguration the active mining configuration
+   * @param slowBlockThresholdMs threshold in milliseconds above which a block is considered slow;
+   *     negative values disable slow-block metrics collection
    */
   public static void registerRuntimeServices(
       final BesuPluginContextImpl pluginContext,
