@@ -76,15 +76,6 @@ import org.slf4j.LoggerFactory;
 public class MergeCoordinator implements MergeMiningCoordinator, BadChainListener {
   private static final Logger LOG = LoggerFactory.getLogger(MergeCoordinator.class);
 
-  /**
-   * On PoS you do not need to compete with other nodes for block production, since you have an
-   * allocated slot for that, so in this case make sense to always try to fill the block, if there
-   * are enough pending transactions, until the remaining gas is less than the minimum needed for
-   * the smaller transaction. So for PoS the min-block-occupancy-ratio option is set to always try
-   * to fill 100% of the block.
-   */
-  private static final double TRY_FILL_BLOCK = 1.0;
-
   /** The Mining parameters. */
   protected final MiningConfiguration miningConfiguration;
 
@@ -175,7 +166,6 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
     if (miningParams.getTargetGasLimit().isEmpty()) {
       getDefaultGasLimit(protocolSchedule).ifPresent(miningParams::setTargetGasLimit);
     }
-    miningParams.setMinBlockOccupancyRatio(TRY_FILL_BLOCK);
     this.miningConfiguration = miningParams;
 
     this.mergeBlockCreatorFactory = mergeBlockCreatorFactory;
@@ -265,7 +255,8 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
             prevRandao,
             feeRecipient,
             withdrawals,
-            parentBeaconBlockRoot);
+            parentBeaconBlockRoot,
+            slotNumber);
 
     if (blockCreationTasks.containsKey(payloadIdentifier)) {
       LOG.debug(
@@ -510,10 +501,22 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
             .log();
         return null;
       } catch (final Throwable e) {
-        LOG.warn(
-            "Something went wrong creating block for payload id {}, error {}",
-            payloadIdentifier,
-            logException(e));
+        if (isBlockCreationCancelled(payloadIdentifier)) {
+          // when the block creation is canceled, in some edge cases it is possible to have
+          // concurrency issues, so inform the user how to interpret that possibility
+          LOG.info(
+              "Got an exception after cancellation of block creation for payload id {}. "
+                  + "This is expected if you already saw the earlier "
+                  + "\"the completion of the block creation continues in a best effort mode, and could fail due to concurrency issues\" log. "
+                  + "If you do not see that earlier warning log please report this stack trace.",
+              payloadIdentifier,
+              e);
+        } else {
+          LOG.warn(
+              "Something went wrong creating block for payload id {}, error {}",
+              payloadIdentifier,
+              logException(e));
+        }
         return null;
       }
     }

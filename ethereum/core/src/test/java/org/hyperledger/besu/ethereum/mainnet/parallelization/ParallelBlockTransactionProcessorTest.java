@@ -142,6 +142,8 @@ class ParallelBlockTransactionProcessorTest {
     when(chainHeadBlockHeader.getStateRoot()).thenReturn(Hash.EMPTY_TRIE_HASH);
 
     when(blockHeader.getParentHash()).thenReturn(Hash.ZERO);
+    when(blockHeader.getStateRoot()).thenReturn(Hash.EMPTY_TRIE_HASH);
+    when(blockHeader.getBlockHash()).thenReturn(Hash.ZERO);
 
     when(protocolContext.getWorldStateArchive()).thenReturn(worldStateArchive);
     when(worldStateArchive.getWorldState(any())).thenReturn(Optional.of(worldState));
@@ -220,7 +222,8 @@ class ParallelBlockTransactionProcessorTest {
             (__, ___) -> Hash.EMPTY,
             BLOB_GAS_PRICE,
             sameThreadExecutor,
-            Optional.empty());
+            Optional.empty(),
+            Optional.of(f.env().blockHeader()));
 
     verify(f.transactionProcessor(), times(1))
         .processTransaction(
@@ -273,7 +276,8 @@ class ParallelBlockTransactionProcessorTest {
             (__, ___) -> Hash.EMPTY,
             BLOB_GAS_PRICE,
             sameThreadExecutor,
-            Optional.empty());
+            Optional.empty(),
+            Optional.of(f.env().blockHeader()));
 
     final Optional<TransactionProcessingResult> maybeResult =
         f.processor()
@@ -309,7 +313,8 @@ class ParallelBlockTransactionProcessorTest {
             (__, ___) -> Hash.EMPTY,
             BLOB_GAS_PRICE,
             sameThreadExecutor,
-            Optional.empty());
+            Optional.empty(),
+            Optional.of(f.env().blockHeader()));
 
     verify(f.transactionProcessor(), times(1))
         .processTransaction(
@@ -350,7 +355,23 @@ class ParallelBlockTransactionProcessorTest {
     when(beneficiaryChanges.getAddress()).thenReturn(MINING_BENEFICIARY);
     when(partialView.accountChanges()).thenReturn(Collections.singletonList(beneficiaryChanges));
 
-    stubSuccessfulTransaction(f.transactionProcessor(), Optional.of(partialView));
+    // Stub processTransaction to also simulate traceBeforeRewardTransaction with a non-zero reward,
+    // so that getProcessingResult updates the post-balance in the partial block access view.
+    final Wei simulatedReward = Wei.of(1_000_000L);
+    when(f.transactionProcessor()
+            .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              final OperationTracer tracer = invocation.getArgument(4, OperationTracer.class);
+              tracer.traceBeforeRewardTransaction(null, null, simulatedReward);
+              return TransactionProcessingResult.successful(
+                  Collections.emptyList(),
+                  0,
+                  0,
+                  Bytes.EMPTY,
+                  Optional.of(partialView),
+                  ValidationResult.valid());
+            });
 
     final BlockAccessListBuilder balBuilder = mock(BlockAccessListBuilder.class);
 
@@ -363,7 +384,8 @@ class ParallelBlockTransactionProcessorTest {
             (__, ___) -> Hash.EMPTY,
             BLOB_GAS_PRICE,
             sameThreadExecutor,
-            Optional.of(balBuilder));
+            Optional.of(balBuilder),
+            Optional.of(f.env().blockHeader()));
 
     verify(f.transactionProcessor())
         .processTransaction(
@@ -529,7 +551,8 @@ class ParallelBlockTransactionProcessorTest {
         (__, ___) -> Hash.EMPTY,
         BLOB_GAS_PRICE,
         sameThreadExecutor,
-        Optional.empty());
+        Optional.empty(),
+        Optional.of(env.blockHeader()));
 
     final Transaction[] txs = new Transaction[] {tx0, tx1, tx2};
     for (int i = 0; i < txs.length; i++) {

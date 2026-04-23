@@ -17,9 +17,7 @@ package org.hyperledger.besu.evm.frame;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Collections.emptySet;
 
-import org.hyperledger.besu.collections.undo.UndoScalar;
 import org.hyperledger.besu.collections.undo.UndoSet;
-import org.hyperledger.besu.collections.undo.UndoTable;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Log;
 import org.hyperledger.besu.datatypes.VersionedHash;
@@ -33,7 +31,6 @@ import org.hyperledger.besu.evm.internal.UnderflowException;
 import org.hyperledger.besu.evm.operation.Operation;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -44,7 +41,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
@@ -202,12 +198,21 @@ public class MessageFrame {
   // Metadata fields.
   private final Type type;
   private State state = State.NOT_STARTED;
+  // EIP-7778/EIP-8037: Flipped to true once code execution starts; used to distinguish a halt
+  // that fires during opcode execution (halt-burn counts toward block regular gas) from a halt
+  // raised pre-execution in the processor's start() (halt-burn must be excluded).
+  private boolean codeExecuted = false;
 
   // Machine state fields.
   private long gasRemaining;
   private int pc;
   private final Memory memory = new Memory();
   private final OperandStack stack;
+  // EVM v2 stack: 4 longs per 256-bit word (index 0 = most significant, index 3 = least
+  // significant)
+  private final long[] stackDataV2;
+  private int stackTopV2;
+  private final int stackMaxSizeV2;
   private Bytes output = Bytes.EMPTY;
   private Bytes returnData = Bytes.EMPTY;
   private Code createdCode = null;
@@ -241,7 +246,7 @@ public class MessageFrame {
   private Optional<Eip7928AccessList> eip7928AccessList = Optional.empty();
 
   /** The mark of the undoable collections at the creation of this message frame */
-  private final long undoMark;
+  private long undoMark;
 
   /**
    * Builder builder.
@@ -253,6 +258,7 @@ public class MessageFrame {
   }
 
   private MessageFrame(
+      final boolean enableEvmV2,
       final Type type,
       final WorldUpdater worldUpdater,
       final long initialGas,
@@ -275,6 +281,9 @@ public class MessageFrame {
     this.worldUpdater = worldUpdater;
     this.gasRemaining = initialGas;
     this.stack = new OperandStack(txValues.maxStackSize());
+    this.stackDataV2 = enableEvmV2 ? new long[txValues.maxStackSize() * 4] : null;
+    this.stackTopV2 = 0;
+    this.stackMaxSizeV2 = txValues.maxStackSize();
     this.pc = 0;
     this.recipient = recipient;
     this.contract = contract;
@@ -474,6 +483,59 @@ public class MessageFrame {
   public int stackSize() {
     return stack.size();
   }
+
+  // region --- EVM v2 long[] stack operations ---
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns the backing long[] array of the operand stack.
+   *
+   * @return the raw data array
+   */
+  public long[] stackDataV2() {
+    return stackDataV2;
+  }
+
+  /**
+   * Returns the current stack top (item count, 0 = empty).
+   *
+   * @return the item count
+   */
+  public int stackTopV2() {
+    return stackTopV2;
+  }
+
+  /**
+   * Sets the stack top (item count). Used after StackMath operations.
+   *
+   * @param newTop the new item count
+   */
+  public void setTopV2(final int newTop) {
+    this.stackTopV2 = newTop;
+  }
+
+  /**
+   * Returns true if the stack has at least {@code n} items.
+   *
+   * @param n the number of items required
+   * @return true if the stack contains at least n items
+   */
+  public boolean stackHasItemsV2(final int n) {
+    return stackTopV2 >= n;
+  }
+
+  /**
+   * Returns true if the stack has space for {@code n} more items.
+   *
+   * @param n the number of additional items
+   * @return true if the stack can accommodate n more items
+   */
+  public boolean stackHasSpaceV2(final int n) {
+    return stackTopV2 + n <= stackMaxSizeV2;
+  }
+
+  // ---------------------------------------------------------------------------
+  // endregion
 
   /**
    * Returns whether the message frame is static or not.
@@ -806,6 +868,161 @@ public class MessageFrame {
    */
   public long getGasRefund() {
     return txValues.gasRefunds().get();
+  }
+
+  /**
+   * Increment the state gas used (EIP-8037). This is NOT undone on revert since consumed gas is
+   * consumed regardless of execution outcome.
+   *
+   * @param amount The amount of state gas to add
+   */
+  public void incrementStateGasUsed(final long amount) {
+    txValues.stateGasUsed().set(txValues.stateGasUsed().get() + amount);
+  }
+
+  /**
+   * Return the accumulated state gas used (EIP-8037).
+   *
+   * @return accumulated state gas used
+   */
+  public long getStateGasUsed() {
+    return txValues.stateGasUsed().get();
+  }
+
+  /**
+   * Gets the state gas reservoir (EIP-8037).
+   *
+   * @return the state gas reservoir amount
+   */
+  public long getStateGasReservoir() {
+    return txValues.stateGasReservoir().get();
+  }
+
+  /**
+   * Sets the state gas reservoir (EIP-8037).
+   *
+   * @param amount the amount to set the reservoir to
+   */
+  public void setStateGasReservoir(final long amount) {
+    txValues.stateGasReservoir().set(amount);
+  }
+
+  /**
+   * Increments the state gas reservoir (EIP-8037). Used for state gas refunds.
+   *
+   * @param amount the amount to add to the reservoir
+   */
+  public void incrementStateGasReservoir(final long amount) {
+    txValues.stateGasReservoir().set(txValues.stateGasReservoir().get() + amount);
+  }
+
+  /**
+   * Consumes state gas: draws from the reservoir first, then from gasRemaining. Also increments
+   * stateGasUsed. Returns false if insufficient total gas (reservoir + gasRemaining).
+   *
+   * @param amount the amount of state gas to consume
+   * @return true if the gas was successfully consumed, false if insufficient gas
+   */
+  public boolean consumeStateGas(final long amount) {
+    final long reservoir = txValues.stateGasReservoir().get();
+    if (reservoir >= amount) {
+      txValues.stateGasReservoir().set(reservoir - amount);
+    } else {
+      // Overflow goes to gasRemaining
+      final long overflow = amount - reservoir;
+      if (gasRemaining < overflow) {
+        return false;
+      }
+      txValues.stateGasReservoir().set(0L);
+      gasRemaining -= overflow;
+    }
+    txValues.stateGasUsed().set(txValues.stateGasUsed().get() + amount);
+    return true;
+  }
+
+  /**
+   * Consumes state gas, draining all available gas even when the full amount cannot be covered.
+   * Always increments stateGasUsed by the full amount regardless of gas availability. Used when a
+   * transaction-level (depth-0) contract creation fails after state gas has been partially
+   * committed: we must record the charge for block accounting even though execution fails.
+   *
+   * @param amount the amount of state gas to consume
+   * @return true if sufficient gas was available, false if gas was insufficient (but drained
+   *     anyway)
+   */
+  public boolean consumeStateGasForced(final long amount) {
+    final long reservoir = txValues.stateGasReservoir().get();
+    if (reservoir >= amount) {
+      txValues.stateGasReservoir().set(reservoir - amount);
+      txValues.stateGasUsed().set(txValues.stateGasUsed().get() + amount);
+      return true;
+    } else {
+      final long overflow = amount - reservoir;
+      txValues.stateGasReservoir().set(0L);
+      final boolean sufficient = gasRemaining >= overflow;
+      gasRemaining = Math.max(0L, gasRemaining - overflow);
+      txValues.stateGasUsed().set(txValues.stateGasUsed().get() + amount);
+      return sufficient;
+    }
+  }
+
+  /**
+   * Accumulates state gas that spilled into gasRemaining in a reverted child frame (EIP-8037). This
+   * counter is NOT undone on revert — it tracks permanently burned spill gas for block accounting.
+   *
+   * @param amount the spill amount to accumulate
+   */
+  public void accumulateStateGasSpillBurned(final long amount) {
+    txValues.stateGasSpillBurned()[0] += amount;
+  }
+
+  /**
+   * Returns the total state gas spill burned by reverted child frames (EIP-8037).
+   *
+   * @return accumulated spill burned
+   */
+  public long getStateGasSpillBurned() {
+    return txValues.stateGasSpillBurned()[0];
+  }
+
+  /**
+   * Accumulates gas that was sitting unused in the initial frame's gasRemaining at the moment of an
+   * exceptional halt (EIP-7778/EIP-8037). The sender still pays for this gas via receipts, but it
+   * did not correspond to any executed regular or state gas, so it must be excluded from the block
+   * regular gas total. Not undone on revert.
+   *
+   * @param amount the gasRemaining snapshot taken immediately before clearGasRemaining on the
+   *     initial frame's exceptional halt
+   */
+  public void accumulateInitialFrameRegularHaltBurn(final long amount) {
+    txValues.initialFrameRegularHaltBurn()[0] += amount;
+  }
+
+  /**
+   * Returns the gas burned on the initial frame's exceptional halt.
+   *
+   * @return accumulated halt-burned gas
+   */
+  public long getInitialFrameRegularHaltBurn() {
+    return txValues.initialFrameRegularHaltBurn()[0];
+  }
+
+  /**
+   * Marks that opcode execution has started on this frame. Once set, an exceptional halt is
+   * classified as "during code execution" (halt-burned gas counts toward block regular gas) rather
+   * than pre-execution (halt-burned gas is excluded).
+   */
+  public void markCodeExecuted() {
+    this.codeExecuted = true;
+  }
+
+  /**
+   * Returns whether opcode execution has started on this frame.
+   *
+   * @return true if {@link #markCodeExecuted()} was invoked
+   */
+  public boolean isCodeExecuted() {
+    return codeExecuted;
   }
 
   /**
@@ -1249,6 +1466,16 @@ public class MessageFrame {
   }
 
   /**
+   * Advances the undo mark to the current point, so that subsequent rollback() calls will not undo
+   * changes made before this point. Used by the transaction processor to protect intrinsic state
+   * gas charges (EIP-8037 auth delegation and contract creation) from being rolled back when the
+   * initial frame's execution reverts.
+   */
+  public void advanceUndoMark() {
+    this.undoMark = txValues.transientStorage().mark();
+  }
+
+  /**
    * Accessor for versionedHashes, if present.
    *
    * @return optional list of hashes
@@ -1302,6 +1529,8 @@ public class MessageFrame {
     private Optional<Eip7928AccessList> eip7928AccessList = Optional.empty();
 
     private Optional<List<VersionedHash>> versionedHashes = Optional.empty();
+
+    private boolean enableEvmV2 = false;
 
     /** Instantiates a new Builder. */
     public Builder() {
@@ -1596,6 +1825,17 @@ public class MessageFrame {
       return this;
     }
 
+    /**
+     * Sets whether the experimental EVM v2 (long[] stack) is enabled.
+     *
+     * @param enableEvmV2 true to enable EVM v2
+     * @return the builder
+     */
+    public Builder enableEvmV2(final boolean enableEvmV2) {
+      this.enableEvmV2 = enableEvmV2;
+      return this;
+    }
+
     private void validate() {
       if (parentMessageFrame == null) {
         checkState(worldUpdater != null, "Missing message frame world updater");
@@ -1634,22 +1874,16 @@ public class MessageFrame {
         HashSet<Address> warmedUpAddresses = new HashSet<>();
         warmedUpAddresses.add(contract);
         newTxValues =
-            new TxValues(
+            TxValues.forTransaction(
                 blockHashLookup,
                 maxStackSize,
                 UndoSet.of(warmedUpAddresses),
-                UndoTable.of(HashBasedTable.create()),
                 originator,
                 gasPrice,
                 blobGasPrice,
                 blockValues,
-                new ArrayDeque<>(),
                 miningBeneficiary,
-                versionedHashes,
-                UndoTable.of(HashBasedTable.create()),
-                UndoSet.of(new HashSet<>()),
-                UndoSet.of(new HashSet<>()),
-                new UndoScalar<>(0L));
+                versionedHashes);
         updater = worldUpdater;
         newStatic = isStatic;
       } else {
@@ -1661,6 +1895,7 @@ public class MessageFrame {
 
       MessageFrame messageFrame =
           new MessageFrame(
+              enableEvmV2,
               type,
               updater,
               initialGas,

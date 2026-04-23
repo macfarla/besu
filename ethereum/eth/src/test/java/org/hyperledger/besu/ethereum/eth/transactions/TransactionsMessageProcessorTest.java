@@ -18,15 +18,23 @@ import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofMinutes;
 import static java.time.Instant.now;
 import static java.util.Arrays.asList;
+import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.ethereum.core.BlockDataGenerator;
 import org.hyperledger.besu.ethereum.core.Transaction;
+import org.hyperledger.besu.ethereum.eth.EthProtocolConfiguration;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 import org.hyperledger.besu.ethereum.eth.messages.TransactionsMessage;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason;
 import org.hyperledger.besu.metrics.StubMetricsSystem;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,11 +63,18 @@ public class TransactionsMessageProcessorTest {
 
     messageHandler =
         new TransactionsMessageProcessor(
-            transactionTracker, transactionPool, new TransactionPoolMetrics(metricsSystem));
+            transactionTracker,
+            transactionPool,
+            new TransactionPoolMetrics(metricsSystem),
+            EthProtocolConfiguration.DEFAULT_MAX_TRANSACTIONS_PER_MESSAGE);
   }
 
   @Test
   public void shouldMarkAllReceivedTransactionsAsSeen() {
+    when(transactionTracker.receivedTransactions(
+            peer1, asList(transaction1, transaction2, transaction3)))
+        .thenReturn(asList(transaction1, transaction2, transaction3));
+
     messageHandler.processTransactionsMessage(
         peer1,
         TransactionsMessage.create(asList(transaction1, transaction2, transaction3)),
@@ -67,27 +82,33 @@ public class TransactionsMessageProcessorTest {
         ofMinutes(1));
 
     verify(transactionTracker)
-        .markTransactionsAsSeen(peer1, asList(transaction1, transaction2, transaction3));
+        .receivedTransactions(peer1, asList(transaction1, transaction2, transaction3));
   }
 
   @Test
   public void shouldAddReceivedTransactionsToTransactionPool() {
+    when(transactionTracker.receivedTransactions(
+            peer1, asList(transaction1, transaction2, transaction3)))
+        .thenReturn(asList(transaction1, transaction2, transaction3));
+
     messageHandler.processTransactionsMessage(
         peer1,
         TransactionsMessage.create(asList(transaction1, transaction2, transaction3)),
         now(),
         ofMinutes(1));
+
     verify(transactionPool).addRemoteTransactions(asList(transaction1, transaction2, transaction3));
   }
 
   @Test
-  public void shouldNotMarkReceivedExpiredTransactionsAsSeen() {
+  public void shouldIgnoreExpiredMessage() {
     messageHandler.processTransactionsMessage(
         peer1,
         TransactionsMessage.create(asList(transaction1, transaction2, transaction3)),
         now().minus(ofMinutes(1)),
         ofMillis(1));
     verifyNoInteractions(transactionTracker);
+    verifyNoInteractions(transactionPool);
     assertThat(
             metricsSystem.getCounterValue(
                 TransactionPoolMetrics.EXPIRED_MESSAGES_COUNTER_NAME,
@@ -96,17 +117,42 @@ public class TransactionsMessageProcessorTest {
   }
 
   @Test
-  public void shouldNotAddReceivedTransactionsToTransactionPoolIfExpired() {
+  public void shouldAddOnlyFreshTransactionsToPool() {
+    // Tracker deduplicates: only transaction1 is fresh; transaction2 and transaction3 already seen
+    when(transactionTracker.receivedTransactions(
+            peer1, asList(transaction1, transaction2, transaction3)))
+        .thenReturn(singletonList(transaction1));
+
     messageHandler.processTransactionsMessage(
         peer1,
         TransactionsMessage.create(asList(transaction1, transaction2, transaction3)),
-        now().minus(ofMinutes(1)),
-        ofMillis(1));
+        now(),
+        ofMinutes(1));
+
+    verify(transactionPool).addRemoteTransactions(singletonList(transaction1));
+    verifyNoMoreInteractions(transactionPool);
+  }
+
+  @Test
+  public void shouldDisconnectPeerWhenTooManyTransactionsInMessage() {
+    final int maxPerMessage = 2;
+    final TransactionsMessageProcessor strictHandler =
+        new TransactionsMessageProcessor(
+            transactionTracker,
+            transactionPool,
+            new TransactionPoolMetrics(metricsSystem),
+            maxPerMessage);
+
+    final List<Transaction> tooMany = new ArrayList<>();
+    for (int i = 0; i < maxPerMessage + 1; i++) {
+      tooMany.add(generator.transaction());
+    }
+
+    strictHandler.processTransactionsMessage(
+        peer1, TransactionsMessage.create(tooMany), now(), ofMinutes(1));
+
+    verify(peer1).disconnect(DisconnectReason.BREACH_OF_PROTOCOL_MALFORMED_MESSAGE_RECEIVED);
     verifyNoInteractions(transactionPool);
-    assertThat(
-            metricsSystem.getCounterValue(
-                TransactionPoolMetrics.EXPIRED_MESSAGES_COUNTER_NAME,
-                TransactionsMessageProcessor.METRIC_LABEL))
-        .isEqualTo(1);
+    verifyNoInteractions(transactionTracker);
   }
 }

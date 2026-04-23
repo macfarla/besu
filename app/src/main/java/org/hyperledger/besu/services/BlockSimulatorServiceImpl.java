@@ -48,14 +48,8 @@ public class BlockSimulatorServiceImpl implements BlockSimulationService {
   private final Blockchain blockchain;
   private final boolean collectExecutionMetrics;
 
-  private static final SignatureAlgorithm SIGNATURE_ALGORITHM =
-      SignatureAlgorithmFactory.getInstance();
   // Dummy signature for transactions to not fail being processed.
-  private static final SECPSignature FAKE_SIGNATURE =
-      SIGNATURE_ALGORITHM.createSignature(
-          SIGNATURE_ALGORITHM.getHalfCurveOrder(),
-          SIGNATURE_ALGORITHM.getHalfCurveOrder(),
-          (byte) 0);
+  private final SECPSignature fakeSignature;
 
   /**
    * This constructor creates a BlockSimulatorServiceImpl object
@@ -77,6 +71,12 @@ public class BlockSimulatorServiceImpl implements BlockSimulationService {
       final long slowBlockThresholdMs) {
     this.blockchain = blockchain;
     this.collectExecutionMetrics = slowBlockThresholdMs >= 0;
+    final SignatureAlgorithm signatureAlgorithm = SignatureAlgorithmFactory.getInstance();
+    this.fakeSignature =
+        signatureAlgorithm.createSignature(
+            signatureAlgorithm.getHalfCurveOrder(),
+            signatureAlgorithm.getHalfCurveOrder(),
+            (byte) 0);
     blockSimulator =
         new BlockSimulator(
             worldStateArchive,
@@ -177,7 +177,7 @@ public class BlockSimulatorServiceImpl implements BlockSimulationService {
           new BlockSimulationParameter.BlockSimulationParameterBuilder()
               .blockStateCalls(List.of(blockStateCall))
               .validation(true)
-              .fakeSignature(FAKE_SIGNATURE)
+              .fakeSignature(fakeSignature)
               .collectExecutionMetrics(collectExecutionMetrics)
               .build();
 

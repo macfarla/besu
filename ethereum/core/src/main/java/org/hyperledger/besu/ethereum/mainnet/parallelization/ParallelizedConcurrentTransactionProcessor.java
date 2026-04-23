@@ -35,7 +35,6 @@ import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.accumulator
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
-import org.hyperledger.besu.evm.tracing.TracerAggregator;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.evm.worldstate.WorldView;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
@@ -105,10 +104,17 @@ public class ParallelizedConcurrentTransactionProcessor extends ParallelBlockTra
       final Address miningBeneficiary,
       final BlockHashLookup blockHashLookup,
       final Wei blobGasPrice,
-      final Optional<BlockAccessListBuilder> blockAccessListBuilder) {
+      final Optional<BlockAccessListBuilder> blockAccessListBuilder,
+      final Optional<BlockHeader> maybeParentHeader) {
 
-    final BonsaiWorldState ws = getWorldState(protocolContext, blockHeader);
-    if (ws == null) return null;
+    if (maybeParentHeader.isEmpty()) {
+      return null;
+    }
+    final BonsaiWorldState ws =
+        getWorldState(protocolContext, maybeParentHeader.get()).orElse(null);
+    if (ws == null) {
+      return null;
+    }
 
     // Create a per-worker ExecutionStats if slow block tracing is active, so that state-layer
     // metrics (account/storage reads, cache hits) from this worker thread are captured and can
@@ -168,7 +174,7 @@ public class ParallelizedConcurrentTransactionProcessor extends ParallelBlockTra
 
       // Compose the background tracer with the mining beneficiary tracer
       final OperationTracer composedTracer =
-          TracerAggregator.combining(backgroundBlockTracer, miningBeneficiaryTracer);
+          CompositeOperationTracer.of(backgroundBlockTracer, miningBeneficiaryTracer);
 
       final TransactionProcessingResult result =
           transactionProcessor.processTransaction(
@@ -271,18 +277,21 @@ public class ParallelizedConcurrentTransactionProcessor extends ParallelBlockTra
           miningBeneficiaryAccount.incrementBalance(reward);
         }
 
-        final Wei miningBeneficiaryPostBalance = miningBeneficiaryAccount.getBalance();
-        transactionProcessingResult
-            .getPartialBlockAccessView()
-            .ifPresent(
-                partialBlockAccessView ->
-                    partialBlockAccessView.accountChanges().stream()
-                        .filter(
-                            accountChanges -> accountChanges.getAddress().equals(miningBeneficiary))
-                        .findFirst()
-                        .ifPresent(
-                            accountChanges ->
-                                accountChanges.setPostBalance(miningBeneficiaryPostBalance)));
+        if (!reward.isZero()) {
+          final Wei miningBeneficiaryPostBalance = miningBeneficiaryAccount.getBalance();
+          transactionProcessingResult
+              .getPartialBlockAccessView()
+              .ifPresent(
+                  partialBlockAccessView ->
+                      partialBlockAccessView.accountChanges().stream()
+                          .filter(
+                              accountChanges ->
+                                  accountChanges.getAddress().equals(miningBeneficiary))
+                          .findFirst()
+                          .ifPresent(
+                              accountChanges ->
+                                  accountChanges.setPostBalance(miningBeneficiaryPostBalance)));
+        }
 
         blockAccumulator.importStateChangesFromSource(transactionAccumulator);
 

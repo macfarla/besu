@@ -165,13 +165,6 @@ public class TransactionSelectionResult {
       new TransactionSelectionResult(BaseStatus.INVALID_TX_EVALUATION_TOO_LONG);
 
   /**
-   * The transaction has not been selected since too large and the occupancy of the block is enough
-   * to stop the selection.
-   */
-  public static final TransactionSelectionResult BLOCK_OCCUPANCY_ABOVE_THRESHOLD =
-      new TransactionSelectionResult(BaseStatus.BLOCK_OCCUPANCY_ABOVE_THRESHOLD);
-
-  /**
    * There was an unhandled exception during the evaluation of the transaction. If this occurs, it
    * indicates there is a bug somewhere.
    */
@@ -198,6 +191,14 @@ public class TransactionSelectionResult {
    */
   public static final TransactionSelectionResult TOO_LARGE_FOR_REMAINING_BLOCK_SIZE =
       TransactionSelectionResult.invalidTransient("TOO_LARGE_FOR_REMAINING_BLOCK_SIZE");
+
+  /**
+   * The transaction has not been selected because merging its execution access view would exceed
+   * the EIP-7928 block access list item budget for the pending block gas limit, but selection
+   * should continue.
+   */
+  public static final TransactionSelectionResult BLOCK_ACCESS_LIST_ITEM_BUDGET_EXCEEDED =
+      TransactionSelectionResult.invalidTransient("BLOCK_ACCESS_LIST_ITEM_BUDGET_EXCEEDED");
 
   /**
    * The transaction has not been selected since its current price is below the configured min

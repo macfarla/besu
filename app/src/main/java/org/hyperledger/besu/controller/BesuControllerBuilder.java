@@ -59,7 +59,6 @@ import org.hyperledger.besu.ethereum.eth.manager.MonitoredExecutors;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTaskExecutor;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTaskRequestSender;
 import org.hyperledger.besu.ethereum.eth.manager.snap.SnapProtocolManager;
-import org.hyperledger.besu.ethereum.eth.peervalidation.DaoForkPeerValidator;
 import org.hyperledger.besu.ethereum.eth.peervalidation.PeerValidator;
 import org.hyperledger.besu.ethereum.eth.peervalidation.RequiredBlocksPeerValidator;
 import org.hyperledger.besu.ethereum.eth.sync.DefaultSynchronizer;
@@ -92,22 +91,26 @@ import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.BonsaiWorldStateProvi
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.cache.BonsaiCachedMerkleTrieLoader;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.cache.CodeCache;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.BonsaiWorldStateKeyValueStorage;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.flat.BonsaiArchiveFlatDbStrategy;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.BonsaiArchiver;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsaiarchive.BonsaiFlatDbToArchiveMigrator;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedWorldStateKeyValueStorage;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.flat.CodeHashCodeStorageStrategy;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.trielog.TrieLogManager;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.trielog.TrieLogPruner;
 import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
+import org.hyperledger.besu.ethereum.worldstate.FlatDbMode;
 import org.hyperledger.besu.ethereum.worldstate.PathBasedExtraStorageConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive.WorldStateHealer;
-import org.hyperledger.besu.ethereum.worldstate.WorldStateKeyValueStorage;
-import org.hyperledger.besu.ethereum.worldstate.WorldStatePreimageStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorageCoordinator;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
 import org.hyperledger.besu.metrics.ObservableMetricsSystem;
 import org.hyperledger.besu.plugin.ServiceManager;
 import org.hyperledger.besu.plugin.services.permissioning.NodeMessagePermissioningProvider;
 import org.hyperledger.besu.plugin.services.storage.DataStorageFormat;
+import org.hyperledger.besu.plugin.services.storage.WorldStateKeyValueStorage;
+import org.hyperledger.besu.plugin.services.storage.WorldStatePreimageStorage;
 import org.hyperledger.besu.services.BesuPluginContextImpl;
 
 import java.io.Closeable;
@@ -120,7 +123,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -862,7 +866,13 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
 
     final Optional<SnapProtocolManager> maybeSnapProtocolManager =
         createSnapProtocolManager(
-            protocolContext, worldStateStorageCoordinator, ethPeers, snapMessages, synchronizer);
+            protocolSchedule,
+            protocolContext,
+            worldStateStorageCoordinator,
+            ethPeers,
+            snapMessages,
+            scheduler,
+            synchronizer);
 
     final MiningCoordinator miningCoordinator =
         createMiningCoordinator(
@@ -897,6 +907,10 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
       }
     }
 
+    final List<Closeable> closeables = new ArrayList<>();
+    closeables.add(protocolContext.getWorldStateArchive());
+    closeables.add(storageProvider);
+
     if (DataStorageFormat.X_BONSAI_ARCHIVE.equals(
         dataStorageConfiguration.getDataStorageFormat())) {
       final BonsaiWorldStateKeyValueStorage worldStateKeyValueStorage =
@@ -907,12 +921,38 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
               blockchain,
               scheduler,
               ((BonsaiWorldStateProvider) worldStateArchive).getTrieLogManager());
-      blockchain.observeBlockAdded(archiver);
-    }
 
-    final List<Closeable> closeables = new ArrayList<>();
-    closeables.add(protocolContext.getWorldStateArchive());
-    closeables.add(storageProvider);
+      if (worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.FULL)
+          || worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.PARTIAL)) {
+        final BonsaiFlatDbToArchiveMigrator archiveMigrator =
+            createArchiveMigrator(worldStateStorageCoordinator, worldStateArchive, blockchain);
+        closeables.add(archiveMigrator);
+
+        final AtomicBoolean migrationStarted = new AtomicBoolean(false);
+        final AtomicLong syncSubscriptionId = new AtomicLong();
+        syncSubscriptionId.set(
+            synchronizer.subscribeInSync(
+                (inSync) -> {
+                  if (inSync && migrationStarted.compareAndSet(false, true)) {
+                    synchronizer.unsubscribeInSync(syncSubscriptionId.get());
+                    LOG.info("Node is in sync, starting Bonsai archive migration");
+                    archiveMigrator
+                        .migrate()
+                        .thenRun(() -> blockchain.observeBlockAdded(archiver))
+                        .exceptionally(
+                            error -> {
+                              LOG.error(
+                                  "Archive migration failed, archiver will remain disabled until restart",
+                                  error);
+                              return null;
+                            });
+                  }
+                },
+                0));
+      } else {
+        blockchain.observeBlockAdded(archiver);
+      }
+    }
 
     return new BesuController(
         protocolSchedule,
@@ -1018,6 +1058,27 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
     archiver.initialize();
     LOG.info("Bonsai archiver initialised");
     return archiver;
+  }
+
+  private BonsaiFlatDbToArchiveMigrator createArchiveMigrator(
+      final WorldStateStorageCoordinator worldStateStorageCoordinator,
+      final WorldStateArchive worldStateArchive,
+      final Blockchain blockchain) {
+    final BonsaiWorldStateKeyValueStorage worldStateKeyValueStorage =
+        worldStateStorageCoordinator.getStrategy(BonsaiWorldStateKeyValueStorage.class);
+    final TrieLogManager trieLogManager =
+        ((BonsaiWorldStateProvider) worldStateArchive).getTrieLogManager();
+    final ScheduledExecutorService migrationExecutor =
+        MonitoredExecutors.newScheduledThreadPool("archive-migrator", 1, metricsSystem);
+    final BonsaiArchiveFlatDbStrategy archiveStrategy =
+        new BonsaiArchiveFlatDbStrategy(metricsSystem, new CodeHashCodeStorageStrategy());
+    return new BonsaiFlatDbToArchiveMigrator(
+        worldStateKeyValueStorage,
+        trieLogManager,
+        blockchain,
+        migrationExecutor,
+        metricsSystem,
+        archiveStrategy);
   }
 
   /**
@@ -1274,10 +1335,12 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
   }
 
   private Optional<SnapProtocolManager> createSnapProtocolManager(
+      final ProtocolSchedule protocolSchedule,
       final ProtocolContext protocolContext,
       final WorldStateStorageCoordinator worldStateStorageCoordinator,
       final EthPeers ethPeers,
       final EthMessages snapMessages,
+      final EthScheduler ethScheduler,
       final Synchronizer synchronizer) {
     return Optional.of(
         new SnapProtocolManager(
@@ -1285,6 +1348,8 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
             syncConfig.getSnapSyncConfiguration(),
             ethPeers,
             snapMessages,
+            ethScheduler,
+            protocolSchedule,
             protocolContext,
             synchronizer));
   }
@@ -1379,13 +1444,6 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
   protected List<PeerValidator> createPeerValidators(
       final ProtocolSchedule protocolSchedule, final PeerTaskExecutor peerTaskExecutor) {
     final List<PeerValidator> validators = new ArrayList<>();
-
-    final OptionalLong daoBlock = genesisConfigOptions.getDaoForkBlock();
-    if (daoBlock.isPresent()) {
-      // Setup dao validator
-      validators.add(
-          new DaoForkPeerValidator(protocolSchedule, peerTaskExecutor, daoBlock.getAsLong()));
-    }
 
     for (final Map.Entry<Long, Hash> requiredBlock : requiredBlocks.entrySet()) {
       validators.add(

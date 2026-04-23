@@ -57,7 +57,8 @@ public class ParallelTransactionPreprocessing implements PreprocessingFunction {
       final Wei blobGasPrice,
       final Optional<BlockAccessListBuilder> blockAccessListBuilder,
       final Optional<BlockAccessList> maybeBlockBal,
-      final BlockProcessingContext blockProcessingContext) {
+      final BlockProcessingContext blockProcessingContext,
+      final Optional<BlockHeader> maybeParentHeader) {
     if (!(protocolContext.getWorldStateArchive() instanceof PathBasedWorldStateProvider)) {
       return Optional.empty();
     }
@@ -82,7 +83,8 @@ public class ParallelTransactionPreprocessing implements PreprocessingFunction {
         blockHashLookup,
         blobGasPrice,
         executor,
-        blockAccessListBuilder);
+        blockAccessListBuilder,
+        maybeParentHeader);
 
     return Optional.of(new PreprocessingContext(parallelProcessor));
   }

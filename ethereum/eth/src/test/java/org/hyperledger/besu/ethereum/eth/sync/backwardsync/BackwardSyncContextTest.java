@@ -16,7 +16,6 @@ package org.hyperledger.besu.ethereum.eth.sync.backwardsync;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 import static org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider.createInMemoryBlockchain;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -295,17 +294,9 @@ public class BackwardSyncContextTest {
   public void shouldSyncUntilHash() throws Exception {
     final Hash hash = getRemoteBlockByNumber(REMOTE_HEIGHT).getHash();
     final CompletableFuture<Void> future = context.syncBackwardsUntil(hash);
+    future.orTimeout(30, TimeUnit.SECONDS);
 
-    // Use Awaitility with timeout like stable tests do
-    await()
-        .atMost(30, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(
-            () -> {
-              respondUntilFutureIsDone(future);
-              assertThat(future).isDone();
-            });
-
+    respondUntilFutureIsDone(future);
     future.get();
     assertThat(localBlockchain.getChainHeadBlock()).isEqualTo(remoteBlockchain.getChainHeadBlock());
   }
@@ -326,20 +317,11 @@ public class BackwardSyncContextTest {
 
   @Test
   public void shouldSyncUntilRemoteBranch() throws Exception {
-
     final CompletableFuture<Void> future =
         context.syncBackwardsUntil(getRemoteBlockByNumber(REMOTE_HEIGHT));
+    future.orTimeout(30, TimeUnit.SECONDS);
 
-    // Use Awaitility with timeout like stable tests do
-    await()
-        .atMost(30, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(
-            () -> {
-              respondUntilFutureIsDone(future);
-              assertThat(future).isDone();
-            });
-
+    respondUntilFutureIsDone(future);
     future.get();
     assertThat(localBlockchain.getChainHeadBlock()).isEqualTo(remoteBlockchain.getChainHeadBlock());
   }
@@ -358,17 +340,9 @@ public class BackwardSyncContextTest {
     final CompletableFuture<Void> secondFuture = context.syncBackwardsUntil(higherBlock);
 
     assertThat(future).isSameAs(secondFuture);
+    future.orTimeout(30, TimeUnit.SECONDS);
 
-    // Use Awaitility with timeout like stable tests do
-    await()
-        .atMost(30, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(
-            () -> {
-              respondUntilFutureIsDone(future);
-              assertThat(future).isDone();
-            });
-
+    respondUntilFutureIsDone(future);
     future.get();
     assertThat(localBlockchain.getChainHeadBlock()).isEqualTo(remoteBlockchain.getChainHeadBlock());
   }
@@ -556,7 +530,8 @@ public class BackwardSyncContextTest {
   }
 
   @Test
-  public void whenBlockNotFoundInPeers_shouldRemoveBlockFromQueueAndProgressInNextSession() {
+  public void whenBlockNotFoundInPeers_shouldRemoveBlockFromQueueAndProgressInNextSession()
+      throws Exception {
     // This scenario can happen due to a reorg
     // Expectation we progress beyond the reorg block upon receiving the next FCU
 
@@ -568,12 +543,14 @@ public class BackwardSyncContextTest {
     // represents first FCU with a block that will become reorged away
     final CompletableFuture<Void> fcuBeforeReorg = context.syncBackwardsUntil(reorgBlock.getHash());
     respondUntilFutureIsDone(fcuBeforeReorg);
+    fcuBeforeReorg.get();
     assertThat(localBlockchain.getChainHeadBlockNumber()).isLessThan(reorgBlockHeight);
 
     // represents subsequent FCU with successfully reorged version of the same block
     final CompletableFuture<Void> fcuAfterReorg =
         context.syncBackwardsUntil(getRemoteBlockByNumber(reorgBlockHeight).getHash());
     respondUntilFutureIsDone(fcuAfterReorg);
+    fcuAfterReorg.get();
     assertThat(localBlockchain.getChainHeadBlock())
         .isEqualTo(remoteBlockchain.getBlockByNumber(reorgBlockHeight).orElseThrow());
   }

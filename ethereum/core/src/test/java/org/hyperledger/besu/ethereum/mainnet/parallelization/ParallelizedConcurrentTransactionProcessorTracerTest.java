@@ -47,7 +47,6 @@ import org.hyperledger.besu.evm.internal.EvmConfiguration;
 import org.hyperledger.besu.evm.operation.Operation;
 import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
-import org.hyperledger.besu.evm.tracing.TracerAggregator;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 import org.hyperledger.besu.plugin.services.tracer.BlockAwareOperationTracer;
 
@@ -114,6 +113,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
     when(chainHeadBlockHeader.getHash()).thenReturn(Hash.ZERO);
     when(chainHeadBlockHeader.getStateRoot()).thenReturn(Hash.EMPTY_TRIE_HASH);
     when(blockHeader.getParentHash()).thenReturn(Hash.ZERO);
+    when(blockHeader.getStateRoot()).thenReturn(Hash.EMPTY_TRIE_HASH);
+    when(blockHeader.getBlockHash()).thenReturn(Hash.ZERO);
     when(protocolContext.getWorldStateArchive()).thenReturn(worldStateArchive);
     when(worldStateArchive.getWorldState(any())).thenReturn(Optional.of(worldState));
   }
@@ -169,7 +170,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
               final OperationTracer tracer = invocation.getArgument(4, OperationTracer.class);
               // The composed tracer should contain an EVMExecutionMetricsTracer (background)
               // and the miningBeneficiaryTracer, NOT NO_TRACING
-              assertThat(TracerAggregator.hasTracer(tracer, EVMExecutionMetricsTracer.class))
+              assertThat(
+                      CompositeOperationTracer.hasTracer(tracer, EVMExecutionMetricsTracer.class))
                   .as("Background tracer should contain EVMExecutionMetricsTracer")
                   .isTrue();
               return TransactionProcessingResult.successful(
@@ -192,7 +194,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         (__, ___) -> Hash.EMPTY,
         BLOB_GAS_PRICE,
         sameThreadExecutor,
-        Optional.empty());
+        Optional.empty(),
+        Optional.of(blockHeader));
 
     // Verify processTransaction was actually called (and our assertion ran)
     verify(transactionProcessor)
@@ -220,7 +223,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         (__, ___) -> Hash.EMPTY,
         BLOB_GAS_PRICE,
         sameThreadExecutor,
-        Optional.empty());
+        Optional.empty(),
+        Optional.of(blockHeader));
 
     final Optional<TransactionProcessingResult> result =
         processor.getProcessingResult(
@@ -256,7 +260,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         (__, ___) -> Hash.EMPTY,
         BLOB_GAS_PRICE,
         sameThreadExecutor,
-        Optional.empty());
+        Optional.empty(),
+        Optional.of(blockHeader));
 
     final List<Transaction> txs = List.of(tx0, tx1, tx2);
     for (int i = 0; i < 3; i++) {
@@ -303,7 +308,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         (__, ___) -> Hash.EMPTY,
         BLOB_GAS_PRICE,
         sameThreadExecutor,
-        Optional.empty());
+        Optional.empty(),
+        Optional.of(blockHeader));
 
     final Optional<TransactionProcessingResult> result =
         processor.getProcessingResult(
@@ -333,7 +339,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
     when(protocolContext.getWorldStateArchive()).thenReturn(worldStateArchive);
 
     // Mock processTransaction to simulate EVM opcode activity on the background tracer.
-    // The composed tracer (TracerAggregator of EVMExecutionMetricsTracer + miningBeneficiaryTracer)
+    // The composed tracer (CompositeOperationTracer of EVMExecutionMetricsTracer +
+    // miningBeneficiaryTracer)
     // is passed to processTransaction; simulating opcodes on it forwards to the
     // EVMExecutionMetricsTracer.
     when(transactionProcessor.processTransaction(
@@ -373,7 +380,8 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
           (__, ___) -> Hash.EMPTY,
           BLOB_GAS_PRICE,
           threadPool,
-          Optional.empty());
+          Optional.empty(),
+          Optional.of(blockHeader));
 
       // Wait for all parallel tasks to complete before confirming
       threadPool.shutdown();

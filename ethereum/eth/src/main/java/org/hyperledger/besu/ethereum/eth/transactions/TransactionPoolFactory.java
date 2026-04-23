@@ -130,8 +130,13 @@ public class TransactionPoolFactory {
     final TransactionsMessageHandler transactionsMessageHandler =
         new TransactionsMessageHandler(
             ethContext.getScheduler(),
-            new TransactionsMessageProcessor(transactionTracker, transactionPool, metrics),
-            transactionPoolConfiguration.getUnstable().getTxMessageKeepAliveSeconds());
+            new TransactionsMessageProcessor(
+                transactionTracker,
+                transactionPool,
+                metrics,
+                ethProtocolConfiguration.getMaxTransactionsPerMessage()),
+            transactionPoolConfiguration.getUnstable().getTxMessageKeepAliveSeconds(),
+            ethProtocolConfiguration.getMaxMessageSize());
 
     final NewPooledTransactionHashesMessageHandler pooledTransactionsMessageHandler =
         new NewPooledTransactionHashesMessageHandler(
@@ -232,8 +237,10 @@ public class TransactionPoolFactory {
       final TransactionPool transactionPool,
       final TransactionsMessageHandler transactionsMessageHandler,
       final NewPooledTransactionHashesMessageHandler pooledTransactionsMessageHandler) {
+    ethContext.getEthPeers().subscribeConnect(transactionTracker);
     ethContext.getEthPeers().subscribeDisconnect(transactionTracker);
     protocolContext.getBlockchain().observeBlockAdded(transactionPool);
+    protocolContext.getBlockchain().observeBlockAdded(transactionTracker);
     ethContext
         .getEthMessages()
         .subscribe(EthProtocolMessages.TRANSACTIONS, transactionsMessageHandler);
