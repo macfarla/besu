@@ -21,7 +21,10 @@ import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.MutableWorldState;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.mainnet.BalConfiguration;
+import org.hyperledger.besu.ethereum.mainnet.ExecutionStats;
+import org.hyperledger.besu.ethereum.mainnet.ExecutionStatsHolder;
 import org.hyperledger.besu.ethereum.mainnet.MainnetTransactionProcessor;
+import org.hyperledger.besu.ethereum.mainnet.SlowBlockTracer;
 import org.hyperledger.besu.ethereum.mainnet.TransactionValidationParams;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.AccessLocationTracker;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
@@ -84,6 +87,17 @@ public class BalConcurrentTransactionProcessor extends ParallelBlockTransactionP
     final BonsaiWorldState ws = getWorldState(protocolContext, blockHeader);
     if (ws == null) return null;
 
+    final ExecutionStats workerStats =
+        (blockProcessingContext != null
+                && BackgroundTracerFactory.hasMetricsTracer(
+                    blockProcessingContext.getOperationTracer()))
+            ? new ExecutionStats()
+            : null;
+    if (workerStats != null) {
+      ExecutionStatsHolder.set(workerStats);
+      ws.setStateMetricsCollector(workerStats);
+    }
+
     try {
       ws.disableCacheMerkleTrieLoader();
       final ParallelizedTransactionContext.Builder ctxBuilder =
@@ -125,10 +139,14 @@ public class BalConcurrentTransactionProcessor extends ParallelBlockTransactionP
       ctxBuilder
           .transactionAccumulator(blockUpdater)
           .transactionProcessingResult(result)
-          .backgroundTracer(backgroundTracer);
+          .backgroundTracer(backgroundTracer)
+          .workerExecutionStats(workerStats);
 
       return ctxBuilder.build();
     } finally {
+      if (workerStats != null) {
+        ExecutionStatsHolder.clear();
+      }
       ws.close();
     }
   }
@@ -165,12 +183,23 @@ public class BalConcurrentTransactionProcessor extends ParallelBlockTransactionP
 
         blockAccumulator.importStateChangesFromSource(txAccumulator);
 
-        // Consolidate tracer results from successful parallel execution
+        // Consolidate EVM op metrics from the background tracer
         ctx.backgroundTracer()
             .ifPresent(
                 backgroundTracer ->
                     BackgroundTracerFactory.consolidateTracerResults(
                         backgroundTracer, blockProcessingContext));
+
+        // Consolidate state-layer metrics (account/storage reads, cache stats) from the worker
+        ctx.workerExecutionStats()
+            .ifPresent(
+                workerStats ->
+                    BackgroundTracerFactory.findSlowBlockTracer(
+                            blockProcessingContext != null
+                                ? blockProcessingContext.getOperationTracer()
+                                : OperationTracer.NO_TRACING)
+                        .map(SlowBlockTracer::getExecutionStats)
+                        .ifPresent(mainStats -> mainStats.mergeStateCountsFrom(workerStats)));
 
         confirmedParallelizedTransactionCounter.ifPresent(Counter::inc);
         result.setIsProcessedInParallel(Optional.of(Boolean.TRUE));

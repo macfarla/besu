@@ -425,7 +425,7 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
       accountValue.setUpdated(null);
     }
 
-    getUpdatedAccounts().parallelStream()
+    getUpdatedAccounts().stream()
         .forEach(
             tracked -> {
               final Address updatedAddress = tracked.getAddress();
@@ -490,7 +490,6 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                 getStateMetricsCollector().incrementAccountWrites();
               }
 
-              // parallel stream here may cause database corruption
               updatedAccount
                   .getUpdatedStorage()
                   .entrySet()
