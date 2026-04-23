@@ -22,7 +22,6 @@ import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.PathBasedWo
 import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.operation.Operation.OperationResult;
-import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
 import org.hyperledger.besu.evm.worldstate.WorldView;
 import org.hyperledger.besu.plugin.data.BlockBody;
 import org.hyperledger.besu.plugin.data.BlockHeader;
@@ -37,13 +36,19 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.tuweni.bytes.Bytes;
+import org.apache.tuweni.units.bigints.UInt256;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A standalone tracer that collects execution metrics and logs slow blocks.
+ * A tracer that collects execution metrics and logs slow blocks, wrapping a delegate tracer.
  *
- * <p>This tracer implements the cross-client execution metrics specification, collecting detailed
+ * <p>This tracer implements the decorator pattern: all tracer calls are forwarded to the wrapped
+ * {@code delegate} tracer (typically a plugin-provided {@link BlockAwareOperationTracer}), while
+ * also collecting block execution metrics inline. This eliminates the need for a separate
+ * EVMExecutionMetricsTracer sub-tracer or a TracerAggregator for composition.
+ *
+ * <p>The tracer implements the cross-client execution metrics specification, collecting detailed
  * statistics about block execution including timing, state access patterns, cache performance, and
  * EVM operation counts. Blocks exceeding the configured threshold are logged in a standardized JSON
  * format.
@@ -57,18 +62,23 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
   private final long slowBlockThresholdMs;
+  private final BlockAwareOperationTracer delegate;
   private ExecutionStats executionStats;
-  private EVMExecutionMetricsTracer metricsTracer;
 
   /**
-   * Creates a new SlowBlockTracer. Only instantiate when slow block tracing is enabled (threshold
-   * &gt;= 0). When disabled, callers should not create a SlowBlockTracer at all.
+   * Creates a new SlowBlockTracer that wraps the given delegate tracer. Only instantiate when slow
+   * block logging is enabled (threshold &gt;= 0). When disabled, callers should use the delegate
+   * directly.
    *
    * @param slowBlockThresholdMs the threshold in milliseconds beyond which blocks are logged. Zero
    *     logs all blocks.
+   * @param delegate the delegate tracer to forward all calls to (typically the plugin-provided
+   *     block import tracer)
    */
-  public SlowBlockTracer(final long slowBlockThresholdMs) {
+  public SlowBlockTracer(
+      final long slowBlockThresholdMs, final BlockAwareOperationTracer delegate) {
     this.slowBlockThresholdMs = slowBlockThresholdMs;
+    this.delegate = delegate;
   }
 
   @Override
@@ -81,13 +91,11 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
     executionStats.startExecution();
     ExecutionStatsHolder.set(executionStats);
 
-    // Set StateMetricsCollector on world state for state-layer metrics
     if (worldView instanceof PathBasedWorldState pws) {
       pws.setStateMetricsCollector(executionStats);
     }
 
-    // Create EVMExecutionMetricsTracer for this block
-    metricsTracer = new EVMExecutionMetricsTracer();
+    delegate.traceStartBlock(worldView, blockHeader, blockBody, miningBeneficiary);
   }
 
   @Override
@@ -99,13 +107,11 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
     executionStats.startExecution();
     ExecutionStatsHolder.set(executionStats);
 
-    // Set StateMetricsCollector on world state for state-layer metrics
     if (worldView instanceof PathBasedWorldState pws) {
       pws.setStateMetricsCollector(executionStats);
     }
 
-    // Create EVMExecutionMetricsTracer for this block
-    metricsTracer = new EVMExecutionMetricsTracer();
+    delegate.traceStartBlock(worldView, processableBlockHeader, miningBeneficiary);
   }
 
   @Override
@@ -120,28 +126,25 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
       final long timeNs) {
     executionStats.incrementTransactionCount();
     executionStats.addGasUsed(gasUsed);
+    delegate.traceEndTransaction(
+        worldView, tx, status, output, logs, gasUsed, selfDestructs, timeNs);
   }
 
   @Override
   public void traceEndBlock(final BlockHeader blockHeader, final BlockBody blockBody) {
     try {
-      // Collect EVM operation counters from EVMExecutionMetricsTracer
-      executionStats.collectMetricsFromTracer(metricsTracer);
       // Use block header's gas_used (post-refund) instead of accumulated pre-refund gas
       executionStats.setGasUsed(blockHeader.getGasUsed());
-      // End execution timing
       executionStats.endExecution();
 
-      // Log if slow
       if (executionStats.isSlowBlock(slowBlockThresholdMs)) {
         logSlowBlock(blockHeader, executionStats);
       }
     } finally {
-      // Clean up thread-local state
       ExecutionStatsHolder.clear();
       executionStats = null;
-      metricsTracer = null;
     }
+    delegate.traceEndBlock(blockHeader, blockBody);
   }
 
   /**
@@ -153,66 +156,93 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
     return executionStats;
   }
 
-  /**
-   * Gets the current execution metrics tracer, if available.
-   *
-   * @return the current EVMExecutionMetricsTracer or null if not in a block
-   */
-  public EVMExecutionMetricsTracer getEVMExecutionMetricsTracer() {
-    return metricsTracer;
+  @Override
+  public void traceContextEnter(final MessageFrame frame) {
+    if (executionStats != null) {
+      final Address recipient = frame.getRecipientAddress();
+      if (recipient != null) {
+        executionStats.recordContractExecuted(recipient);
+        executionStats.recordAccountTouched(recipient);
+      }
+      final Address sender = frame.getSenderAddress();
+      if (sender != null) {
+        executionStats.recordAccountTouched(sender);
+      }
+    }
+    delegate.traceContextEnter(frame);
+  }
+
+  @Override
+  public void traceContextReEnter(final MessageFrame frame) {
+    delegate.traceContextReEnter(frame);
+  }
+
+  @Override
+  public void traceContextExit(final MessageFrame frame) {
+    delegate.traceContextExit(frame);
   }
 
   @Override
   public void tracePreExecution(final MessageFrame frame) {
-    metricsTracer.tracePreExecution(frame);
+    if (executionStats != null) {
+      final var operation = frame.getCurrentOperation();
+      if (operation != null) {
+        final String name = operation.getName();
+        if ("SLOAD".equals(name) || "SSTORE".equals(name)) {
+          final Address storageAddress = frame.getRecipientAddress();
+          final UInt256 slotKey = UInt256.fromBytes(frame.getStackItem(0));
+          executionStats.recordStorageSlotAccessed(storageAddress, slotKey);
+          executionStats.recordAccountTouched(storageAddress);
+        }
+      }
+    }
+    delegate.tracePreExecution(frame);
   }
 
   @Override
   public void tracePostExecution(final MessageFrame frame, final OperationResult operationResult) {
-    metricsTracer.tracePostExecution(frame, operationResult);
+    if (executionStats != null) {
+      final var operation = frame.getCurrentOperation();
+      if (operation != null) {
+        switch (operation.getName()) {
+          case "SLOAD" -> executionStats.incrementSloadCount();
+          case "SSTORE" -> executionStats.incrementSstoreCount();
+          case "CALL", "CALLCODE", "DELEGATECALL", "STATICCALL" ->
+              executionStats.incrementCallCount();
+          case "CREATE", "CREATE2" -> executionStats.incrementCreateCount();
+          default -> {} // No tracking needed for other operations
+        }
+      }
+    }
+    delegate.tracePostExecution(frame, operationResult);
   }
 
   @Override
   public void tracePrecompileCall(
       final MessageFrame frame, final long gasRequirement, final Bytes output) {
-    metricsTracer.tracePrecompileCall(frame, gasRequirement, output);
+    delegate.tracePrecompileCall(frame, gasRequirement, output);
   }
 
   @Override
   public void traceAccountCreationResult(
       final MessageFrame frame, final Optional<ExceptionalHaltReason> haltReason) {
-    metricsTracer.traceAccountCreationResult(frame, haltReason);
+    delegate.traceAccountCreationResult(frame, haltReason);
   }
 
   @Override
   public void tracePrepareTransaction(final WorldView worldView, final Transaction transaction) {
-    metricsTracer.tracePrepareTransaction(worldView, transaction);
+    delegate.tracePrepareTransaction(worldView, transaction);
   }
 
   @Override
   public void traceStartTransaction(final WorldView worldView, final Transaction transaction) {
-    metricsTracer.traceStartTransaction(worldView, transaction);
+    delegate.traceStartTransaction(worldView, transaction);
   }
 
   @Override
   public void traceBeforeRewardTransaction(
       final WorldView worldView, final Transaction tx, final Wei miningReward) {
-    metricsTracer.traceBeforeRewardTransaction(worldView, tx, miningReward);
-  }
-
-  @Override
-  public void traceContextEnter(final MessageFrame frame) {
-    metricsTracer.traceContextEnter(frame);
-  }
-
-  @Override
-  public void traceContextReEnter(final MessageFrame frame) {
-    metricsTracer.traceContextReEnter(frame);
-  }
-
-  @Override
-  public void traceContextExit(final MessageFrame frame) {
-    metricsTracer.traceContextExit(frame);
+    delegate.traceBeforeRewardTransaction(worldView, tx, miningReward);
   }
 
   @Override

@@ -49,6 +49,7 @@ import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.tracing.TracerAggregator;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
+import org.hyperledger.besu.plugin.services.tracer.BlockAwareOperationTracer;
 
 import java.util.Collections;
 import java.util.List;
@@ -63,9 +64,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Tests for tracer handling in parallel transaction processing, specifically verifying that
- * SlowBlockTracer and EVMExecutionMetricsTracer metrics are correctly captured and merged during
- * parallel transaction execution. Tests cover both the BackgroundTracerFactory utility methods and
- * the end-to-end integration through ParallelizedConcurrentTransactionProcessor.
+ * SlowBlockTracer metrics are correctly captured and merged during parallel transaction execution.
+ * Tests cover both the BackgroundTracerFactory utility methods and the end-to-end integration
+ * through ParallelizedConcurrentTransactionProcessor.
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 class ParallelizedConcurrentTransactionProcessorTracerTest {
@@ -140,6 +141,10 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
     return transaction;
   }
 
+  private static SlowBlockTracer newSlowBlockTracer() {
+    return new SlowBlockTracer(0, mock(BlockAwareOperationTracer.class));
+  }
+
   private ParallelizedConcurrentTransactionProcessor createProcessorWithTracer(
       final BlockProcessingContext bpc) {
     return new ParallelizedConcurrentTransactionProcessor(
@@ -152,7 +157,7 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
   void createBackgroundTracer_withSlowBlockTracer_createsMetricsTracer() {
     // When blockProcessingContext has a SlowBlockTracer, the background tracer should be
     // an EVMExecutionMetricsTracer (not NO_TRACING)
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
     when(bpc.getOperationTracer()).thenReturn(slowBlockTracer);
 
@@ -194,100 +199,11 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
-  @Test
-  void createBackgroundTracer_withEVMExecutionMetricsTracer_createsNewInstance() {
-    final EVMExecutionMetricsTracer originalTracer = new EVMExecutionMetricsTracer();
-    final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
-    when(bpc.getOperationTracer()).thenReturn(originalTracer);
-
-    when(transactionProcessor.processTransaction(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
-        .thenAnswer(
-            invocation -> {
-              final OperationTracer tracer = invocation.getArgument(4, OperationTracer.class);
-              assertThat(TracerAggregator.hasTracer(tracer, EVMExecutionMetricsTracer.class))
-                  .as("Background tracer should contain EVMExecutionMetricsTracer")
-                  .isTrue();
-              return TransactionProcessingResult.successful(
-                  Collections.emptyList(),
-                  0,
-                  0,
-                  Bytes.EMPTY,
-                  Optional.empty(),
-                  ValidationResult.valid());
-            });
-
-    final Transaction transaction = mockTransaction();
-    final ParallelizedConcurrentTransactionProcessor processor = createProcessorWithTracer(bpc);
-
-    processor.runAsyncBlock(
-        protocolContext,
-        blockHeader,
-        Collections.singletonList(transaction),
-        MINING_BENEFICIARY,
-        (__, ___) -> Hash.EMPTY,
-        BLOB_GAS_PRICE,
-        sameThreadExecutor,
-        Optional.empty());
-
-    verify(transactionProcessor)
-        .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
-  }
-
-  @Test
-  void createBackgroundTracerAggregator_replacesBothSlowBlockTracerAndMetricsTracer() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
-    final EVMExecutionMetricsTracer metricsTracer = new EVMExecutionMetricsTracer();
-    final OperationTracer otherTracer = mock(OperationTracer.class);
-    final OperationTracer aggregator =
-        TracerAggregator.of(slowBlockTracer, metricsTracer, otherTracer);
-
-    final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
-    when(bpc.getOperationTracer()).thenReturn(aggregator);
-
-    when(transactionProcessor.processTransaction(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
-        .thenAnswer(
-            invocation -> {
-              final OperationTracer tracer = invocation.getArgument(4, OperationTracer.class);
-              assertThat(TracerAggregator.hasTracer(tracer, EVMExecutionMetricsTracer.class))
-                  .as("Background aggregator should contain EVMExecutionMetricsTracer")
-                  .isTrue();
-              // SlowBlockTracer should NOT be present in the background tracer
-              assertThat(TracerAggregator.hasTracer(tracer, SlowBlockTracer.class))
-                  .as("Background aggregator should NOT contain SlowBlockTracer")
-                  .isFalse();
-              return TransactionProcessingResult.successful(
-                  Collections.emptyList(),
-                  0,
-                  0,
-                  Bytes.EMPTY,
-                  Optional.empty(),
-                  ValidationResult.valid());
-            });
-
-    final Transaction transaction = mockTransaction();
-    final ParallelizedConcurrentTransactionProcessor processor = createProcessorWithTracer(bpc);
-
-    processor.runAsyncBlock(
-        protocolContext,
-        blockHeader,
-        Collections.singletonList(transaction),
-        MINING_BENEFICIARY,
-        (__, ___) -> Hash.EMPTY,
-        BLOB_GAS_PRICE,
-        sameThreadExecutor,
-        Optional.empty());
-
-    verify(transactionProcessor)
-        .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
-  }
-
   // ---- End-to-end integration tests through getProcessingResult ----
 
   @Test
   void consolidateTracerResults_mergesMetricsIntoSlowBlockTracer() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     slowBlockTracer.traceStartBlock(null, blockHeader, null, MINING_BENEFICIARY);
 
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
@@ -320,7 +236,7 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
 
   @Test
   void consolidateTracerResults_incrementsTxCountForMultipleConfirmedTxs() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     slowBlockTracer.traceStartBlock(null, blockHeader, null, MINING_BENEFICIARY);
 
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
@@ -357,7 +273,7 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
 
   @Test
   void consolidateTracerResults_doesNotIncrementTxCountForFailedTx() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     slowBlockTracer.traceStartBlock(null, blockHeader, null, MINING_BENEFICIARY);
 
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
@@ -401,45 +317,10 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
   }
 
   @Test
-  void consolidateTracerResults_mergesMetricsIntoSlowBlockTracerInsideAggregator() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
-    slowBlockTracer.traceStartBlock(null, blockHeader, null, MINING_BENEFICIARY);
-
-    final OperationTracer otherTracer = mock(OperationTracer.class);
-    final OperationTracer aggregator = TracerAggregator.of(slowBlockTracer, otherTracer);
-
-    final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
-    when(bpc.getOperationTracer()).thenReturn(aggregator);
-
-    final Transaction transaction = mockTransaction();
-    final ParallelizedConcurrentTransactionProcessor processor = createProcessorWithTracer(bpc);
-
-    processor.runAsyncBlock(
-        protocolContext,
-        blockHeader,
-        Collections.singletonList(transaction),
-        MINING_BENEFICIARY,
-        (__, ___) -> Hash.EMPTY,
-        BLOB_GAS_PRICE,
-        sameThreadExecutor,
-        Optional.empty());
-
-    final Optional<TransactionProcessingResult> result =
-        processor.getProcessingResult(
-            worldState, MINING_BENEFICIARY, transaction, 0, Optional.empty(), Optional.empty());
-
-    assertThat(result).isPresent();
-
-    assertThat(slowBlockTracer.getExecutionStats().getTransactionCount())
-        .as("tx_count should be incremented when SlowBlockTracer is inside TracerAggregator")
-        .isEqualTo(1);
-  }
-
-  @Test
   void parallelExecution_mergesEvmMetricsFromMultipleThreads() throws Exception {
     // Verify that EVM opcode metrics captured on separate threads are correctly merged
     // into the main SlowBlockTracer after conflict-free parallel execution
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     slowBlockTracer.traceStartBlock(null, blockHeader, null, MINING_BENEFICIARY);
 
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
@@ -451,22 +332,20 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
         .thenAnswer(invocation -> Optional.of(createEmptyWorldState()));
     when(protocolContext.getWorldStateArchive()).thenReturn(worldStateArchive);
 
-    // Mock processTransaction to simulate EVM opcode activity on the background tracer
+    // Mock processTransaction to simulate EVM opcode activity on the background tracer.
+    // The composed tracer (TracerAggregator of EVMExecutionMetricsTracer + miningBeneficiaryTracer)
+    // is passed to processTransaction; simulating opcodes on it forwards to the
+    // EVMExecutionMetricsTracer.
     when(transactionProcessor.processTransaction(
             any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenAnswer(
             invocation -> {
               final OperationTracer tracer = invocation.getArgument(4, OperationTracer.class);
-              // Find the EVMExecutionMetricsTracer in the composed tracer
-              final Optional<EVMExecutionMetricsTracer> metricsTracer =
-                  BackgroundTracerFactory.findEVMExecutionMetricsTracer(tracer);
-              assertThat(metricsTracer).isPresent();
-
               // Simulate 2 SLOAD operations per transaction
-              simulateOpcode(metricsTracer.get(), "SLOAD");
-              simulateOpcode(metricsTracer.get(), "SLOAD");
+              simulateOpcode(tracer, "SLOAD");
+              simulateOpcode(tracer, "SLOAD");
               // Simulate 1 CALL per transaction
-              simulateOpcode(metricsTracer.get(), "CALL");
+              simulateOpcode(tracer, "CALL");
 
               return TransactionProcessingResult.successful(
                   Collections.emptyList(),
@@ -516,15 +395,14 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
       }
     }
 
-    // Verify merged EVM metrics: 3 txs x 2 SLOADs = 6, 3 txs x 1 CALL = 3
-    final EVMExecutionMetricsTracer mergedTracer = slowBlockTracer.getEVMExecutionMetricsTracer();
-    assertThat(mergedTracer.getMetrics().getSloadCount())
+    // Verify merged EVM metrics in executionStats: 3 txs x 2 SLOADs = 6, 3 txs x 1 CALL = 3
+    assertThat(slowBlockTracer.getExecutionStats().getSloadCount())
         .as("SLOAD count should be sum across all parallel txs")
         .isEqualTo(6);
-    assertThat(mergedTracer.getMetrics().getCallCount())
+    assertThat(slowBlockTracer.getExecutionStats().getCallCount())
         .as("CALL count should be sum across all parallel txs")
         .isEqualTo(3);
-    assertThat(mergedTracer.getMetrics().getSstoreCount())
+    assertThat(slowBlockTracer.getExecutionStats().getSstoreCount())
         .as("SSTORE count should be zero (no SSTORE ops simulated)")
         .isEqualTo(0);
 
@@ -535,8 +413,7 @@ class ParallelizedConcurrentTransactionProcessorTracerTest {
   }
 
   /** Simulates an EVM opcode by calling tracePostExecution with a mocked MessageFrame. */
-  private static void simulateOpcode(
-      final EVMExecutionMetricsTracer tracer, final String opcodeName) {
+  private static void simulateOpcode(final OperationTracer tracer, final String opcodeName) {
     final MessageFrame frame = mock(MessageFrame.class);
     final Operation operation = mock(Operation.class);
     when(frame.getCurrentOperation()).thenReturn(operation);

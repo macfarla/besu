@@ -328,19 +328,18 @@ public class ExecutionStats implements StateMetricsCollector {
   }
 
   /**
-   * Collects EVM operation counts from an EVMExecutionMetricsTracer.
+   * Merges EVM operation counts from a background EVMExecutionMetricsTracer into this stats object.
+   * Used during parallel execution consolidation to add per-transaction worker metrics into the
+   * block-level stats.
    *
-   * <p>Only EVM opcode-level counters (SLOAD, SSTORE, CALL, CREATE) are collected here. State-layer
-   * metrics flow directly through the {@link StateMetricsCollector} interface.
-   *
-   * @param tracer the EVM metrics tracer to collect from
+   * @param tracer the background worker tracer to merge from
    */
-  public void collectMetricsFromTracer(final EVMExecutionMetricsTracer tracer) {
+  public void mergeEvmCountsFrom(final EVMExecutionMetricsTracer tracer) {
     final var metrics = tracer.getMetrics();
-    this.sloadCount = metrics.getSloadCount();
-    this.sstoreCount = metrics.getSstoreCount();
-    this.callCount = metrics.getCallCount();
-    this.createCount = metrics.getCreateCount();
+    this.sloadCount += metrics.getSloadCount();
+    this.sstoreCount += metrics.getSstoreCount();
+    this.callCount += metrics.getCallCount();
+    this.createCount += metrics.getCreateCount();
     this.uniqueAccountsTouched.addAll(metrics.getUniqueAccountsTouched());
     for (var slot : metrics.getUniqueStorageSlots()) {
       this.uniqueStorageSlots.add(new StorageSlotKey(slot.address(), slot.slot()));

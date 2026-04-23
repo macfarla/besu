@@ -24,14 +24,16 @@ import org.hyperledger.besu.ethereum.mainnet.SlowBlockTracer;
 import org.hyperledger.besu.ethereum.mainnet.systemcall.BlockProcessingContext;
 import org.hyperledger.besu.evm.tracing.EVMExecutionMetricsTracer;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
-import org.hyperledger.besu.evm.tracing.TracerAggregator;
-
-import java.util.Optional;
+import org.hyperledger.besu.plugin.services.tracer.BlockAwareOperationTracer;
 
 import org.junit.jupiter.api.Test;
 
 /** Unit tests for {@link BackgroundTracerFactory}. */
 class BackgroundTracerFactoryTest {
+
+  private static SlowBlockTracer newSlowBlockTracer() {
+    return new SlowBlockTracer(0, mock(BlockAwareOperationTracer.class));
+  }
 
   @Test
   void createBackgroundTracer_nullContext_returnsNoTracing() {
@@ -48,49 +50,15 @@ class BackgroundTracerFactoryTest {
   }
 
   @Test
-  void createBackgroundTracer_withEVMExecutionMetricsTracer_returnsNewInstance() {
-    final EVMExecutionMetricsTracer original = new EVMExecutionMetricsTracer();
-    final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
-    when(bpc.getOperationTracer()).thenReturn(original);
-
-    final OperationTracer background = BackgroundTracerFactory.createBackgroundTracer(bpc);
-
-    assertThat(background).isInstanceOf(EVMExecutionMetricsTracer.class);
-    assertThat(background).isNotSameAs(original);
-  }
-
-  @Test
-  void createBackgroundTracer_withSlowBlockTracer_returnsEVMExecutionMetricsTracer() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+  void createBackgroundTracer_withSlowBlockTracer_returnsNewEVMExecutionMetricsTracer() {
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
     when(bpc.getOperationTracer()).thenReturn(slowBlockTracer);
 
     final OperationTracer background = BackgroundTracerFactory.createBackgroundTracer(bpc);
 
-    assertThat(background)
-        .as("SlowBlockTracer should produce EVMExecutionMetricsTracer background, not NO_TRACING")
-        .isInstanceOf(EVMExecutionMetricsTracer.class);
-  }
-
-  @Test
-  void createBackgroundTracer_withTracerAggregator_replacesMetricsTracers() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
-    final EVMExecutionMetricsTracer metricsTracer = new EVMExecutionMetricsTracer();
-    final OperationTracer otherTracer = mock(OperationTracer.class);
-    final OperationTracer aggregator =
-        TracerAggregator.of(slowBlockTracer, metricsTracer, otherTracer);
-
-    final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
-    when(bpc.getOperationTracer()).thenReturn(aggregator);
-
-    final OperationTracer background = BackgroundTracerFactory.createBackgroundTracer(bpc);
-
-    assertThat(TracerAggregator.hasTracer(background, EVMExecutionMetricsTracer.class))
-        .as("Background aggregator should contain EVMExecutionMetricsTracer")
-        .isTrue();
-    assertThat(TracerAggregator.hasTracer(background, SlowBlockTracer.class))
-        .as("Background aggregator should NOT contain SlowBlockTracer")
-        .isFalse();
+    assertThat(background).isInstanceOf(EVMExecutionMetricsTracer.class);
+    assertThat(background).isNotSameAs(slowBlockTracer);
   }
 
   @Test
@@ -105,20 +73,8 @@ class BackgroundTracerFactoryTest {
   }
 
   @Test
-  void hasMetricsTracer_directEVMExecutionMetricsTracer() {
-    assertThat(BackgroundTracerFactory.hasMetricsTracer(new EVMExecutionMetricsTracer())).isTrue();
-  }
-
-  @Test
   void hasMetricsTracer_slowBlockTracer() {
-    assertThat(BackgroundTracerFactory.hasMetricsTracer(new SlowBlockTracer(0))).isTrue();
-  }
-
-  @Test
-  void hasMetricsTracer_aggregatorContainingSlowBlockTracer() {
-    final OperationTracer aggregator =
-        TracerAggregator.of(new SlowBlockTracer(0), mock(OperationTracer.class));
-    assertThat(BackgroundTracerFactory.hasMetricsTracer(aggregator)).isTrue();
+    assertThat(BackgroundTracerFactory.hasMetricsTracer(newSlowBlockTracer())).isTrue();
   }
 
   @Test
@@ -127,49 +83,9 @@ class BackgroundTracerFactoryTest {
   }
 
   @Test
-  void findEVMExecutionMetricsTracer_directInstance() {
-    final EVMExecutionMetricsTracer tracer = new EVMExecutionMetricsTracer();
-    assertThat(BackgroundTracerFactory.findEVMExecutionMetricsTracer(tracer)).contains(tracer);
-  }
-
-  @Test
-  void findEVMExecutionMetricsTracer_insideSlowBlockTracer() {
-    final SlowBlockTracer sbt = new SlowBlockTracer(0);
-    final BlockHeader blockHeader = mock(BlockHeader.class);
-    // Initialize internal state so metricsTracer is non-null
-    sbt.traceStartBlock(null, blockHeader, null, Address.ZERO);
-
-    final Optional<EVMExecutionMetricsTracer> found =
-        BackgroundTracerFactory.findEVMExecutionMetricsTracer(sbt);
-    assertThat(found).isPresent();
-    assertThat(found.get()).isSameAs(sbt.getEVMExecutionMetricsTracer());
-  }
-
-  @Test
-  void findEVMExecutionMetricsTracer_insideSlowBlockTracerInAggregator() {
-    final SlowBlockTracer sbt = new SlowBlockTracer(0);
-    final BlockHeader blockHeader = mock(BlockHeader.class);
-    sbt.traceStartBlock(null, blockHeader, null, Address.ZERO);
-
-    final OperationTracer aggregator = TracerAggregator.of(sbt, mock(OperationTracer.class));
-
-    final Optional<EVMExecutionMetricsTracer> found =
-        BackgroundTracerFactory.findEVMExecutionMetricsTracer(aggregator);
-    assertThat(found).isPresent();
-    assertThat(found.get()).isSameAs(sbt.getEVMExecutionMetricsTracer());
-  }
-
-  @Test
   void findSlowBlockTracer_directInstance() {
-    final SlowBlockTracer sbt = new SlowBlockTracer(0);
+    final SlowBlockTracer sbt = newSlowBlockTracer();
     assertThat(BackgroundTracerFactory.findSlowBlockTracer(sbt)).contains(sbt);
-  }
-
-  @Test
-  void findSlowBlockTracer_insideAggregator() {
-    final SlowBlockTracer sbt = new SlowBlockTracer(0);
-    final OperationTracer aggregator = TracerAggregator.of(sbt, mock(OperationTracer.class));
-    assertThat(BackgroundTracerFactory.findSlowBlockTracer(aggregator)).contains(sbt);
   }
 
   @Test
@@ -179,14 +95,13 @@ class BackgroundTracerFactoryTest {
 
   @Test
   void consolidateTracerResults_mergesMetricsAndIncrementsTxCount() {
-    final SlowBlockTracer slowBlockTracer = new SlowBlockTracer(0);
+    final SlowBlockTracer slowBlockTracer = newSlowBlockTracer();
     final BlockHeader blockHeader = mock(BlockHeader.class);
     slowBlockTracer.traceStartBlock(null, blockHeader, null, Address.ZERO);
 
     final BlockProcessingContext bpc = mock(BlockProcessingContext.class);
     when(bpc.getOperationTracer()).thenReturn(slowBlockTracer);
 
-    // Simulate a background tracer with some metrics
     final EVMExecutionMetricsTracer backgroundTracer = new EVMExecutionMetricsTracer();
 
     BackgroundTracerFactory.consolidateTracerResults(backgroundTracer, bpc);

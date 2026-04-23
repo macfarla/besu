@@ -47,8 +47,6 @@ import org.hyperledger.besu.ethereum.trie.common.StateRootMismatchException;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.BonsaiWorldState;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.BonsaiWorldStateUpdateAccumulator;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
-import org.hyperledger.besu.evm.tracing.OperationTracer;
-import org.hyperledger.besu.evm.tracing.TracerAggregator;
 import org.hyperledger.besu.evm.worldstate.StackedUpdater;
 import org.hyperledger.besu.evm.worldstate.WorldState;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -158,15 +156,17 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
   }
 
   /**
-   * Creates a SlowBlockTracer if slow block logging is enabled.
+   * Creates a SlowBlockTracer wrapping the given delegate if slow block logging is enabled.
    *
    * @param protocolContext the protocol context
+   * @param delegate the block import tracer to wrap
    * @return an Optional containing the SlowBlockTracer if enabled, empty otherwise
    */
-  private Optional<SlowBlockTracer> getSlowBlockTracer(final ProtocolContext protocolContext) {
+  private Optional<SlowBlockTracer> getSlowBlockTracer(
+      final ProtocolContext protocolContext, final BlockAwareOperationTracer delegate) {
     final long slowBlockThresholdMs = protocolContext.getSlowBlockThresholdMs();
     if (slowBlockThresholdMs >= 0) {
-      return Optional.of(new SlowBlockTracer(slowBlockThresholdMs));
+      return Optional.of(new SlowBlockTracer(slowBlockThresholdMs, delegate));
     }
     return Optional.empty();
   }
@@ -245,25 +245,21 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
     final BlockHashLookup blockHashLookup =
         protocolSpec.getPreExecutionProcessor().createBlockHashLookup(blockchain, blockHeader);
 
-    final BlockAwareOperationTracer blockTracer =
+    final BlockAwareOperationTracer blockImportTracer =
         getBlockImportTracer(protocolContext, blockHeader);
-    final Optional<SlowBlockTracer> maybeSlowBlockTracer = getSlowBlockTracer(protocolContext);
-
-    // Compose operation-level tracer: base tracer + slow block tracer (if enabled)
-    final OperationTracer operationTracer =
-        maybeSlowBlockTracer
-            .<OperationTracer>map(sbt -> TracerAggregator.of(blockTracer, sbt))
-            .orElse(blockTracer);
+    // SlowBlockTracer wraps blockImportTracer as a decorator when slow block logging is enabled
+    final BlockAwareOperationTracer operationTracer =
+        getSlowBlockTracer(protocolContext, blockImportTracer)
+            .<BlockAwareOperationTracer>map(sbt -> sbt)
+            .orElse(blockImportTracer);
 
     final Address miningBeneficiary = miningBeneficiaryCalculator.calculateBeneficiary(blockHeader);
 
     LOG.trace(
         "traceStartBlock for {} using tracer {}",
         blockHeader.getNumber(),
-        blockTracer.getClass().getSimpleName());
-    blockTracer.traceStartBlock(worldState, blockHeader, miningBeneficiary);
-    maybeSlowBlockTracer.ifPresent(
-        sbt -> sbt.traceStartBlock(worldState, blockHeader, miningBeneficiary));
+        operationTracer.getClass().getSimpleName());
+    operationTracer.traceStartBlock(worldState, blockHeader, miningBeneficiary);
 
     final StateRootCommitter stateRootCommitter =
         blockProcessingMetrics.wrapStateRootCommitter(
@@ -569,9 +565,7 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
       }
 
       LOG.trace("traceEndBlock for {}", blockHeader.getNumber());
-      // Call SlowBlockTracer first so it can collect metrics before state cleanup
-      maybeSlowBlockTracer.ifPresent(sbt -> sbt.traceEndBlock(blockHeader, blockBody));
-      blockTracer.traceEndBlock(blockHeader, blockBody);
+      operationTracer.traceEndBlock(blockHeader, blockBody);
 
       return new BlockProcessingResult(
           Optional.of(
