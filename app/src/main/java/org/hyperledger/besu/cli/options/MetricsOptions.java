@@ -165,8 +165,9 @@ public class MetricsOptions implements CLIOptions<MetricsConfiguration.Builder> 
   @CommandLine.Option(
       names = {"--slow-block-threshold"},
       paramLabel = MANDATORY_INTEGER_FORMAT_HELP,
-      description = "Threshold in milliseconds for logging slow blocks (default: ${DEFAULT-VALUE})")
-  private Long slowBlockThresholdMs = 500L;
+      description =
+          "Threshold in milliseconds for logging slow blocks. Negative values disable slow block logging (default: ${DEFAULT-VALUE})")
+  private Long slowBlockThresholdMs = -1L;
 
   /**
    * Returns a newly created {@link MetricsOptions} with default values.
