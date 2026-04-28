@@ -56,6 +56,7 @@ public class ExecutionStats implements StateMetricsCollector {
   private long codeBytesWritten;
   private int accountCreates;
   private int accountDestructs;
+  private int storageDeletes;
 
   // EIP-7702 delegation tracking
   private int eip7702DelegationsSet;
@@ -104,6 +105,7 @@ public class ExecutionStats implements StateMetricsCollector {
     codeBytesWritten = 0;
     accountCreates = 0;
     accountDestructs = 0;
+    storageDeletes = 0;
     eip7702DelegationsSet = 0;
     eip7702DelegationsCleared = 0;
     sloadCount = 0;
@@ -251,8 +253,19 @@ public class ExecutionStats implements StateMetricsCollector {
   }
 
   /** Increments account destruct counter. */
+  @Override
   public void incrementAccountDestructs() {
     accountDestructs++;
+  }
+
+  /**
+   * Adds to the storage slots deleted counter.
+   *
+   * @param count the number of storage slots deleted
+   */
+  @Override
+  public void addStorageDeletes(final int count) {
+    storageDeletes += count;
   }
 
   // EIP-7702 delegation tracking methods
@@ -346,6 +359,7 @@ public class ExecutionStats implements StateMetricsCollector {
     this.codeBytesWritten += other.codeBytesWritten;
     this.accountCreates += other.accountCreates;
     this.accountDestructs += other.accountDestructs;
+    this.storageDeletes += other.storageDeletes;
     this.eip7702DelegationsSet += other.eip7702DelegationsSet;
     this.eip7702DelegationsCleared += other.eip7702DelegationsCleared;
     this.accountCacheHits += other.accountCacheHits;
@@ -842,6 +856,15 @@ public class ExecutionStats implements StateMetricsCollector {
   }
 
   /**
+   * Gets storage slots deleted count.
+   *
+   * @return the storage slots deleted count
+   */
+  public int getStorageDeletes() {
+    return storageDeletes;
+  }
+
+  /**
    * Gets EIP-7702 delegations set count.
    *
    * @return the EIP-7702 delegations set count
@@ -912,7 +935,7 @@ public class ExecutionStats implements StateMetricsCollector {
         "timing":{"execution_ms":%.3f,"state_read_ms":%.3f,"state_hash_ms":%.3f,"commit_ms":%.3f,"total_ms":%.3f},\
         "throughput":{"mgas_per_sec":%.2f},\
         "state_reads":{"accounts":%d,"storage_slots":%d,"code":%d,"code_bytes":%d},\
-        "state_writes":{"accounts":%d,"storage_slots":%d,"code":%d,"code_bytes":%d,"eip7702_delegations_set":%d,"eip7702_delegations_cleared":%d},\
+        "state_writes":{"accounts":%d,"storage_slots":%d,"code":%d,"code_bytes":%d,"accounts_deleted":%d,"storage_slots_deleted":%d,"eip7702_delegations_set":%d,"eip7702_delegations_cleared":%d},\
         "cache":{"account":{"hits":%d,"misses":%d,"hit_rate":%.2f},\
         "storage":{"hits":%d,"misses":%d,"hit_rate":%.2f},\
         "code":{"hits":%d,"misses":%d,"hit_rate":%.2f}},\
@@ -936,6 +959,8 @@ public class ExecutionStats implements StateMetricsCollector {
         storageWrites,
         codeWrites,
         codeBytesWritten,
+        accountDestructs,
+        storageDeletes,
         eip7702DelegationsSet,
         eip7702DelegationsCleared,
         accountCacheHits,

@@ -35,6 +35,16 @@ public interface StateMetricsCollector {
   /** Increments the storage write counter. */
   void incrementStorageWrites();
 
+  /** Increments the account destruct counter. */
+  void incrementAccountDestructs();
+
+  /**
+   * Adds to the storage slots deleted counter.
+   *
+   * @param count the number of storage slots deleted
+   */
+  void addStorageDeletes(int count);
+
   /** Increments the code read counter. */
   void incrementCodeReads();
 
@@ -84,6 +94,12 @@ public interface StateMetricsCollector {
 
         @Override
         public void incrementStorageWrites() {}
+
+        @Override
+        public void incrementAccountDestructs() {}
+
+        @Override
+        public void addStorageDeletes(final int count) {}
 
         @Override
         public void incrementCodeReads() {}

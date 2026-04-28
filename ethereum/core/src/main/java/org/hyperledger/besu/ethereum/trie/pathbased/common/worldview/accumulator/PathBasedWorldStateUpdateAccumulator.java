@@ -410,6 +410,10 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                   }
                 });
       }
+      if (metricsEnabled()) {
+        getStateMetricsCollector().incrementAccountDestructs();
+        getStateMetricsCollector().addStorageDeletes(deletedStorageUpdates.size());
+      }
       if (deletedStorageUpdates.isEmpty()) {
         storageToUpdate.remove(deletedAddress);
       }
@@ -473,6 +477,9 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
 
               if (tracked.getStorageWasCleared()) {
                 storageToClear.add(updatedAddress);
+                if (metricsEnabled() && !pendingStorageUpdates.isEmpty()) {
+                  getStateMetricsCollector().addStorageDeletes(pendingStorageUpdates.size());
+                }
                 pendingStorageUpdates.clear();
               }
 

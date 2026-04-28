@@ -290,6 +290,8 @@ public class SlowBlockTracer implements BlockAwareOperationTracer {
       stateWritesNode.put("storage_slots", stats.getStorageWrites());
       stateWritesNode.put("code", stats.getCodeWrites());
       stateWritesNode.put("code_bytes", stats.getCodeBytesWritten());
+      stateWritesNode.put("accounts_deleted", stats.getAccountDestructs());
+      stateWritesNode.put("storage_slots_deleted", stats.getStorageDeletes());
       stateWritesNode.put("eip7702_delegations_set", stats.getEip7702DelegationsSet());
       stateWritesNode.put("eip7702_delegations_cleared", stats.getEip7702DelegationsCleared());
 
