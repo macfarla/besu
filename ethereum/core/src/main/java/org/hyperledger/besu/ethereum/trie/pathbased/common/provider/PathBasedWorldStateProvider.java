@@ -205,6 +205,33 @@ public abstract class PathBasedWorldStateProvider implements WorldStateArchive {
    * @return the full world state, if available
    */
   private Optional<MutableWorldState> getFullWorldStateFromHead(final Hash blockHash) {
+    final Optional<BlockHeader> maybeHeadHeader =
+        blockchain.getBlockHeader(headWorldState.blockHash()).map(BlockHeader.class::cast);
+    final Optional<BlockHeader> maybeTargetHeader =
+        blockchain.getBlockHeader(blockHash).map(BlockHeader.class::cast);
+    if (maybeHeadHeader.isPresent() && maybeTargetHeader.isPresent()) {
+      final long rollingDistance =
+          maybeTargetHeader.get().getNumber() - maybeHeadHeader.get().getNumber();
+      final long maxLayers = trieLogManager.getMaxLayersToLoad();
+      if (maxLayers > 0 && rollingDistance >= maxLayers) {
+        LOG.warn(
+            "Bonsai head world state is {} blocks behind target block {} (head at block {})."
+                + " This exceeds the maximum roll-forward limit of {}."
+                + " The node cannot validate new blocks until the world state is resynced.",
+            rollingDistance,
+            maybeTargetHeader.get().getNumber(),
+            maybeHeadHeader.get().getNumber(),
+            maxLayers);
+        return Optional.empty();
+      } else if (rollingDistance > 1) {
+        LOG.warn(
+            "Rolling bonsai head world state {} blocks forward to block {} (from block {})."
+                + " This may indicate the world state is falling behind chain head.",
+            rollingDistance,
+            maybeTargetHeader.get().getNumber(),
+            maybeHeadHeader.get().getNumber());
+      }
+    }
     return rollFullWorldStateToBlockHash(headWorldState, blockHash);
   }
 
@@ -293,6 +320,15 @@ public abstract class PathBasedWorldStateProvider implements WorldStateArchive {
             targetBlockHash = targetHeader.getBlockHash();
             persistedBlockHash = persistedHeader.getBlockHash();
           }
+        }
+
+        // log a warning when a non-trivial roll is required
+        if (rollForwards.size() + rollBacks.size() > 1) {
+          LOG.warn(
+              "Bonsai world state roll: {} rollbacks, {} roll-forwards to reach block {}",
+              rollBacks.size(),
+              rollForwards.size(),
+              blockHash);
         }
 
         // attempt the state rolling

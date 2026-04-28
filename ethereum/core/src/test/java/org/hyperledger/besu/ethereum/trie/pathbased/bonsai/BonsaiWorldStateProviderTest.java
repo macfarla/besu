@@ -125,6 +125,28 @@ class BonsaiWorldStateProviderTest {
   }
 
   @Test
+  void shouldReturnEmptyWhenRollForwardExceedsMaxLayersInHeadPath() {
+    bonsaiWorldStateArchive = createBonsaiWorldStateProvider();
+
+    when(trieLogManager.getMaxLayersToLoad()).thenReturn(512L);
+
+    // treat the initial head world state hash as block 0
+    final Hash headHash = ((BonsaiWorldState) bonsaiWorldStateArchive.getWorldState()).blockHash();
+    final BlockHeader genesis = blockBuilder.number(0).buildHeader();
+    final BlockHeader blockHeader512 =
+        blockBuilder.number(512).parentHash(genesis.getHash()).buildHeader();
+
+    when(blockchain.getBlockHeader(headHash)).thenReturn(Optional.of(genesis));
+    when(blockchain.getBlockHeader(blockHeader512.getHash()))
+        .thenReturn(Optional.of(blockHeader512));
+
+    // distance 512 >= maxLayersToLoad 512 → should abort and return empty
+    assertThat(
+            bonsaiWorldStateArchive.getWorldState(withBlockHeaderAndUpdateNodeHead(blockHeader512)))
+        .isEmpty();
+  }
+
+  @Test
   void shouldReturnEmptyWhenLoadingMoreThanMaxLayersBack() {
     bonsaiWorldStateArchive =
         new BonsaiWorldStateProvider(
