@@ -483,11 +483,6 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                 pendingStorageUpdates.clear();
               }
 
-              // Track account write for cross-client execution metrics (account modified)
-              if (metricsEnabled()) {
-                getStateMetricsCollector().incrementAccountWrites();
-              }
-
               updatedAccount
                   .getUpdatedStorage()
                   .entrySet()
@@ -507,10 +502,6 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
                                   updatedAccount.getOriginalStorageValue(keyUInt), value));
                         } else {
                           pendingValue.setUpdated(value);
-                        }
-                        // Track storage write for cross-client execution metrics
-                        if (metricsEnabled()) {
-                          getStateMetricsCollector().incrementStorageWrites();
                         }
                       });
 
@@ -653,6 +644,35 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
   public void markTransactionBoundary() {
     getUpdatedAccounts().clear();
     getDeletedAccounts().clear();
+  }
+
+  /**
+   * Counts unique accounts and storage slots written during block execution and records them in the
+   * provided metrics collector.
+   *
+   * <p>Called once per block just before {@code worldState.persist()} so that each modified slot
+   * and account is counted exactly once, regardless of how many transactions wrote to it. Counting
+   * here rather than in {@link #commit()} avoids the N-times overcounting that would otherwise
+   * occur when the same slot is updated across multiple transactions.
+   *
+   * @param collector the metrics collector to record into
+   */
+  public void collectFinalWriteMetrics(final StateMetricsCollector collector) {
+    if (collector == StateMetricsCollector.NOOP) {
+      return;
+    }
+    // Count unique accounts that were written (updated value is non-null = not just deleted)
+    final int accountWrites =
+        (int) accountsToUpdate.values().stream().filter(v -> v.getUpdated() != null).count();
+    collector.setAccountWrites(accountWrites);
+
+    // Count unique storage slots that were written across all accounts
+    final int storageWrites =
+        storageToUpdate.values().stream()
+            .mapToInt(
+                slots -> (int) slots.values().stream().filter(v -> v.getUpdated() != null).count())
+            .sum();
+    collector.setStorageWrites(storageWrites);
   }
 
   @Override

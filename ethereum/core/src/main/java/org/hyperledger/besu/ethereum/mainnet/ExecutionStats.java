@@ -221,16 +221,14 @@ public class ExecutionStats implements StateMetricsCollector {
 
   // State write methods
 
-  /** Increments account write counter. */
   @Override
-  public void incrementAccountWrites() {
-    accountWrites++;
+  public void setAccountWrites(final int count) {
+    this.accountWrites = count;
   }
 
-  /** Increments storage write counter. */
   @Override
-  public void incrementStorageWrites() {
-    storageWrites++;
+  public void setStorageWrites(final int count) {
+    this.storageWrites = count;
   }
 
   /** Increments code write counter. */
@@ -424,24 +422,6 @@ public class ExecutionStats implements StateMetricsCollector {
    */
   public void setCodeBytesRead(final long bytes) {
     this.codeBytesRead = bytes;
-  }
-
-  /**
-   * Sets the account writes count from tracer metrics.
-   *
-   * @param count the account writes count
-   */
-  public void setAccountWrites(final int count) {
-    this.accountWrites = count;
-  }
-
-  /**
-   * Sets the storage writes count from tracer metrics.
-   *
-   * @param count the storage writes count
-   */
-  public void setStorageWrites(final int count) {
-    this.storageWrites = count;
   }
 
   /**

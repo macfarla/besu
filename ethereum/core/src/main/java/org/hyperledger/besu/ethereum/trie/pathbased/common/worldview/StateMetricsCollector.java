@@ -29,11 +29,19 @@ public interface StateMetricsCollector {
   /** Increments the storage read counter. */
   void incrementStorageReads();
 
-  /** Increments the account write counter. */
-  void incrementAccountWrites();
+  /**
+   * Sets the final unique account write count for the block.
+   *
+   * @param count the number of unique accounts written
+   */
+  void setAccountWrites(int count);
 
-  /** Increments the storage write counter. */
-  void incrementStorageWrites();
+  /**
+   * Sets the final unique storage slot write count for the block.
+   *
+   * @param count the number of unique storage slots written
+   */
+  void setStorageWrites(int count);
 
   /** Increments the account destruct counter. */
   void incrementAccountDestructs();
@@ -90,10 +98,10 @@ public interface StateMetricsCollector {
         public void incrementStorageReads() {}
 
         @Override
-        public void incrementAccountWrites() {}
+        public void setAccountWrites(final int count) {}
 
         @Override
-        public void incrementStorageWrites() {}
+        public void setStorageWrites(final int count) {}
 
         @Override
         public void incrementAccountDestructs() {}

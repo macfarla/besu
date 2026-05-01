@@ -671,7 +671,112 @@ class ExecutionStatsIntegrationTest {
   }
 
   // ========================================================================
-  // Test 11: Combined metrics summary - Validates multiple metrics in one block
+  // Test 11: Unique write counting - Same slot written in multiple transactions
+  // counts as ONE write, not N writes (regression test for per-tx overcounting)
+  // ========================================================================
+
+  @Test
+  void shouldCountUniqueStorageWritesNotPerTransactionWrites() {
+    // Two transactions from account 1 both call setSlot1(), writing to the same storage slot.
+    // If writes are counted per-transaction the result would be 2; the correct answer is 1.
+    Transaction firstWrite =
+        Transaction.builder()
+            .type(TransactionType.EIP1559)
+            .nonce(0)
+            .maxPriorityFeePerGas(Wei.of(5))
+            .maxFeePerGas(Wei.of(7))
+            .gasLimit(3000000L)
+            .to(CONTRACT_ADDRESS)
+            .value(Wei.ZERO)
+            .payload(encodeFunction("setSlot1", Optional.of(11)))
+            .chainId(BigInteger.valueOf(42))
+            .signAndBuild(GENESIS_ACCOUNT_1_KEYPAIR);
+
+    Transaction secondWrite =
+        Transaction.builder()
+            .type(TransactionType.EIP1559)
+            .nonce(1) // same sender, next nonce
+            .maxPriorityFeePerGas(Wei.of(5))
+            .maxFeePerGas(Wei.of(7))
+            .gasLimit(3000000L)
+            .to(CONTRACT_ADDRESS)
+            .value(Wei.ZERO)
+            .payload(encodeFunction("setSlot1", Optional.of(22)))
+            .chainId(BigInteger.valueOf(42))
+            .signAndBuild(GENESIS_ACCOUNT_1_KEYPAIR);
+
+    processTransaction(firstWrite);
+    processTransaction(secondWrite);
+    collectStats();
+
+    assertThat(stats.getSstoreCount())
+        .as("Two SSTORE opcodes should be counted (one per tx)")
+        .isEqualTo(2);
+
+    assertThat(stats.getStorageWrites())
+        .as(
+            "Only 1 unique storage slot was written in the block — "
+                + "write count must not be inflated by the number of transactions touching the slot")
+        .isEqualTo(1);
+  }
+
+  // ========================================================================
+  // Test 12: Unique read counting - Same slot read in multiple transactions
+  // counts as ONE read, not N reads (validates cache-based deduplication)
+  // ========================================================================
+
+  @Test
+  void shouldCountUniqueStorageReadsNotPerTransactionReads() {
+    // Two transactions from separate accounts both call getSlot1() on the contract,
+    // reading the same storage slot.  The first read is a cache miss (counted);
+    // the second should be a cache hit (not counted again).
+    Transaction firstRead =
+        Transaction.builder()
+            .type(TransactionType.EIP1559)
+            .nonce(0)
+            .maxPriorityFeePerGas(Wei.of(5))
+            .maxFeePerGas(Wei.of(7))
+            .gasLimit(3000000L)
+            .to(CONTRACT_ADDRESS)
+            .value(Wei.ZERO)
+            .payload(encodeFunction("getSlot1", Optional.empty()))
+            .chainId(BigInteger.valueOf(42))
+            .signAndBuild(GENESIS_ACCOUNT_1_KEYPAIR);
+
+    Transaction secondRead =
+        Transaction.builder()
+            .type(TransactionType.EIP1559)
+            .nonce(0) // different sender, same slot
+            .maxPriorityFeePerGas(Wei.of(5))
+            .maxFeePerGas(Wei.of(7))
+            .gasLimit(3000000L)
+            .to(CONTRACT_ADDRESS)
+            .value(Wei.ZERO)
+            .payload(encodeFunction("getSlot1", Optional.empty()))
+            .chainId(BigInteger.valueOf(42))
+            .signAndBuild(GENESIS_ACCOUNT_2_KEYPAIR);
+
+    processTransaction(firstRead);
+    processTransaction(secondRead);
+    collectStats();
+
+    assertThat(stats.getSloadCount())
+        .as("Two SLOAD opcodes should be counted (one per tx)")
+        .isEqualTo(2);
+
+    assertThat(stats.getStorageReads())
+        .as(
+            "Only 1 unique storage slot was loaded from underlying storage — "
+                + "the second tx should hit the accumulator cache, not count as a new read")
+        .isEqualTo(1);
+
+    assertThat(stats.getStorageCacheHits())
+        .as("Second read of the same slot should be recorded as a cache hit")
+        .isGreaterThanOrEqualTo(1);
+  }
+
+  // ========================================================================
+  // Test 13 (was 11): Combined metrics summary
   // ========================================================================
 
   @Test
@@ -765,9 +870,12 @@ class ExecutionStatsIntegrationTest {
   }
 
   private void collectStats() {
-    // Trigger root hash calculation to finalize state changes and track writes
-    // This simulates block finalization where account/storage writes are tracked
-    worldState.rootHash();
+    // Collect final write metrics from accumulator (mirrors what persist() does at end-of-block)
+    if (worldState instanceof PathBasedWorldState pathBasedWorldState) {
+      pathBasedWorldState
+          .getAccumulator()
+          .collectFinalWriteMetrics(pathBasedWorldState.getStateMetricsCollector());
+    }
     // Collect EVM operation counts from the tracer
     var metrics = evmMetricsTracer.getMetrics();
     stats.setSloadCount(metrics.getSloadCount());

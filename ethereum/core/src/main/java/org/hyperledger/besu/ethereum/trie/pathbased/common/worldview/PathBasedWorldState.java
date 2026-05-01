@@ -266,6 +266,7 @@ public abstract class PathBasedWorldState
           executionStats.addCommitTime(System.nanoTime() - commitStartNanos);
         }
 
+        accumulator.collectFinalWriteMetrics(stateMetricsCollector);
         accumulator.reset();
       } else {
         stateUpdater.rollback();
