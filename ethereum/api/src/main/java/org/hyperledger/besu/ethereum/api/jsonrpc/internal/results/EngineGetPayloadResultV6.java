@@ -249,11 +249,13 @@ public class EngineGetPayloadResultV6 {
     }
 
     @JsonGetter(value = "blockAccessList")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getBlockAccessList() {
       return blockAccessList;
     }
 
     @JsonGetter(value = "slotNumber")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getSlotNumber() {
       return slotNumber;
     }
