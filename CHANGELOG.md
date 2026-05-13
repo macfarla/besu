@@ -18,7 +18,7 @@
 - BFT option `xemptyblockperiodseconds` has been taken out of experimental and been renamed `emptyblockperiodseconds`. The old config option is deprecated and will be removed in a future release.
 
 ### Bug fixes
-- Fix `testing_buildBlockV1` to return correct `blockValue` (actual priority fees) and omit null `blockAccessList`/`slotNumber` fields from the response payload. [#10492](https://github.com/besu-eth/besu/pull/10492)
+- Fix `testing_buildBlockV1` to return correct `blockValue` (actual priority fees) and omit null `blockAccessList`/`slotNumber` fields from the response payload; same omission applies to `engine_getPayloadV6` (these fields are always populated for a V6 payload). [#10492](https://github.com/besu-eth/besu/pull/10492)
 - Fix `engine_forkchoiceUpdatedV1` now returns `-38003 INVALID_PAYLOAD_ATTRIBUTES` for invalid payload attribute timestamps (zero or not greater than head). [#10353](https://github.com/besu-eth/besu/pull/10353)
 - Fix `engine_newPayloadV4`/`V5` now returns `-32602 INVALID_PARAMS` instead of `INVALID` payload status when execution requests contain an unknown request type. [#10484](https://github.com/besu-eth/besu/pull/10484)
 - Fix `debug_trace*` `storage` field to emit only for SLOAD/SSTORE opcodes showing the single slot touched, matching the execution-apis spec and geth behaviour [#10176](https://github.com/besu-eth/besu/pull/10176)
