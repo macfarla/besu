@@ -24,15 +24,22 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionPendingResult;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionWithMetadataResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
+import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
+
+import java.util.Optional;
 
 public class EthGetTransactionBySenderAndNonce implements JsonRpcMethod {
 
   private final BlockchainQueries blockchainQueries;
+  private final TransactionPool transactionPool;
 
-  public EthGetTransactionBySenderAndNonce(final BlockchainQueries blockchainQueries) {
+  public EthGetTransactionBySenderAndNonce(
+      final BlockchainQueries blockchainQueries, final TransactionPool transactionPool) {
     this.blockchainQueries = blockchainQueries;
+    this.transactionPool = transactionPool;
   }
 
   @Override
@@ -63,6 +70,17 @@ public class EthGetTransactionBySenderAndNonce implements JsonRpcMethod {
           "Invalid nonce parameter (index 1)", RpcErrorType.INVALID_NONCE_PARAMS, e);
     }
 
+    // Check the transaction pool first (pending transactions)
+    final Optional<TransactionPendingResult> pendingResult =
+        transactionPool.getPendingTransactionsFor(sender).pendingTransactions().stream()
+            .filter(pt -> pt.getNonce() == nonce)
+            .findFirst()
+            .map(pt -> new TransactionPendingResult(pt.getTransaction()));
+    if (pendingResult.isPresent()) {
+      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), pendingResult.get());
+    }
+
+    // Fall back to the mined transaction index
     final Object result =
         blockchainQueries
             .transactionBySenderAndNonce(sender, nonce)

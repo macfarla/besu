@@ -25,11 +25,16 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionPendingResult;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionWithMetadataResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.Transaction;
+import org.hyperledger.besu.ethereum.eth.transactions.PendingTransaction;
+import org.hyperledger.besu.ethereum.eth.transactions.SenderPendingTransactionsData;
+import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -49,12 +54,13 @@ class EthGetTransactionBySenderAndNonceTest {
   private static final String METHOD = "eth_getTransactionBySenderAndNonce";
 
   @Mock private BlockchainQueries blockchainQueries;
+  @Mock private TransactionPool transactionPool;
 
   private EthGetTransactionBySenderAndNonce method;
 
   @BeforeEach
   void setUp() {
-    method = new EthGetTransactionBySenderAndNonce(blockchainQueries);
+    method = new EthGetTransactionBySenderAndNonce(blockchainQueries, transactionPool);
   }
 
   @Test
@@ -72,9 +78,11 @@ class EthGetTransactionBySenderAndNonceTest {
   }
 
   @Test
-  void shouldReturnNullWhenTransactionNotFound() {
+  void shouldReturnNullWhenTransactionNotFoundInPoolOrChain() {
     final Address sender = Address.fromHexString("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b");
     final long nonce = 1L;
+    when(transactionPool.getPendingTransactionsFor(sender))
+        .thenReturn(SenderPendingTransactionsData.empty(sender));
     when(blockchainQueries.transactionBySenderAndNonce(sender, nonce)).thenReturn(Optional.empty());
 
     final JsonRpcRequest request =
@@ -87,13 +95,37 @@ class EthGetTransactionBySenderAndNonceTest {
   }
 
   @Test
-  void shouldReturnTransactionWhenFound() {
+  void shouldReturnPendingTransactionWhenFoundInPool() {
+    final Transaction tx = Transaction.readFrom(Bytes.fromHexString(VALID_TRANSACTION));
+    final Address sender = tx.getSender();
+    final long nonce = tx.getNonce();
+    final PendingTransaction pendingTx = new PendingTransaction.Local(tx);
+
+    when(transactionPool.getPendingTransactionsFor(sender))
+        .thenReturn(new SenderPendingTransactionsData(sender, nonce, List.of(pendingTx)));
+
+    final JsonRpcRequest request =
+        new JsonRpcRequest(
+            JSON_RPC_VERSION,
+            METHOD,
+            new Object[] {sender.toHexString(), "0x" + Long.toHexString(nonce)});
+    final JsonRpcResponse actual = method.response(new JsonRpcRequestContext(request));
+
+    assertThat(actual)
+        .usingRecursiveComparison()
+        .isEqualTo(new JsonRpcSuccessResponse(request.getId(), new TransactionPendingResult(tx)));
+  }
+
+  @Test
+  void shouldReturnMinedTransactionWhenFoundInChain() {
     final Transaction tx = Transaction.readFrom(Bytes.fromHexString(VALID_TRANSACTION));
     final Address sender = tx.getSender();
     final long nonce = tx.getNonce();
     final TransactionWithMetadata txWithMeta =
         new TransactionWithMetadata(tx, 1L, Optional.empty(), Hash.ZERO, 0, 0L);
 
+    when(transactionPool.getPendingTransactionsFor(sender))
+        .thenReturn(SenderPendingTransactionsData.empty(sender));
     when(blockchainQueries.transactionBySenderAndNonce(sender, nonce))
         .thenReturn(Optional.of(txWithMeta));
 
