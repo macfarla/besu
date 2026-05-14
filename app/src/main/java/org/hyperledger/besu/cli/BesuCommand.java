@@ -643,7 +643,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       description =
           "Enable indexing of mined transactions by sender address and nonce, to support"
               + " eth_getTransactionBySenderAndNonce. Disabled by default; enabling on an existing"
-              + " node requires a re-sync to populate historical entries (default: ${DEFAULT-VALUE})")
+              + " node requires a resync to populate historical entries (default: ${DEFAULT-VALUE})")
   private final Boolean txSenderNonceIndexEnabled = false;
 
   @CommandLine.Option(
