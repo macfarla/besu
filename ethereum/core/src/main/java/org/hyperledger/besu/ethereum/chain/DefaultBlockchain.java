@@ -84,6 +84,8 @@ public class DefaultBlockchain implements MutableBlockchain {
 
   private Comparator<BlockHeader> blockChoiceRule;
 
+  private boolean senderNonceIndexing = false;
+
   private Optional<Cache<Hash, BlockHeader>> blockHeadersCache;
   private Optional<Cache<Hash, BlockBody>> blockBodiesCache;
   private Optional<Cache<Hash, List<TransactionReceipt>>> transactionReceiptsCache;
@@ -311,6 +313,18 @@ public class DefaultBlockchain implements MutableBlockchain {
         validateStorageNonEmpty(blockchainStorage), "Cannot create Blockchain from empty storage");
     return new DefaultBlockchain(
         Optional.empty(), blockchainStorage, metricsSystem, reorgLoggingThreshold);
+  }
+
+  /**
+   * Enables the sender+nonce → transaction hash index. Disabled by default to avoid unexpected
+   * storage growth on existing nodes that have not re-synced with this feature enabled.
+   *
+   * @param enabled whether to maintain the sender-nonce index
+   * @return this instance for chaining
+   */
+  public DefaultBlockchain setSenderNonceIndexingEnabled(final boolean enabled) {
+    this.senderNonceIndexing = enabled;
+    return this;
   }
 
   private static boolean validateStorageNonEmpty(final BlockchainStorage blockchainStorage) {
@@ -1003,7 +1017,7 @@ public class DefaultBlockchain implements MutableBlockchain {
     chainHeadTransactionCount = block.getBody().getTransactions().size();
   }
 
-  private static void indexTransactionsForBlock(
+  private void indexTransactionsForBlock(
       final BlockchainStorage.Updater updater,
       final Hash blockHash,
       final List<Transaction> transactions) {
@@ -1011,7 +1025,9 @@ public class DefaultBlockchain implements MutableBlockchain {
       final Transaction tx = transactions.get(index);
       final TransactionLocation loc = new TransactionLocation(blockHash, index);
       updater.putTransactionLocation(tx.getHash(), loc);
-      updater.putTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce(), tx.getHash());
+      if (senderNonceIndexing) {
+        updater.putTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce(), tx.getHash());
+      }
     }
   }
 
@@ -1025,11 +1041,13 @@ public class DefaultBlockchain implements MutableBlockchain {
     }
   }
 
-  private static void clearIndexedTransactionsForBlock(
+  private void clearIndexedTransactionsForBlock(
       final BlockchainStorage.Updater updater, final List<Transaction> txs) {
     for (final Transaction tx : txs) {
       updater.removeTransactionLocation(tx.getHash());
-      updater.removeTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce());
+      if (senderNonceIndexing) {
+        updater.removeTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce());
+      }
     }
   }
 
