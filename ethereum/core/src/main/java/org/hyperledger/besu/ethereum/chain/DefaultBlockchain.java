@@ -22,6 +22,7 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static org.hyperledger.besu.metrics.BesuMetricCategory.BLOCKCHAIN;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.chain.BlockchainStorage.Updater;
 import org.hyperledger.besu.ethereum.core.Block;
@@ -500,6 +501,11 @@ public class DefaultBlockchain implements MutableBlockchain {
   }
 
   @Override
+  public Optional<Hash> getTransactionHashBySenderAndNonce(final Address sender, final long nonce) {
+    return blockchainStorage.getTransactionHashBySenderAndNonce(sender, nonce);
+  }
+
+  @Override
   public Comparator<BlockHeader> getBlockChoiceRule() {
     return blockChoiceRule;
   }
@@ -638,9 +644,7 @@ public class DefaultBlockchain implements MutableBlockchain {
     updater.putBlockHeader(blockHash, block.getHeader());
     updater.putBlockHash(block.getHeader().getNumber(), blockHash);
     updater.putBlockBody(blockHash, block.getBody());
-    final List<Hash> listOfTxHashes =
-        block.getBody().getTransactions().stream().map(Transaction::getHash).toList();
-    indexTransactionsForBlock(updater, blockHash, listOfTxHashes);
+    indexTransactionsForBlock(updater, blockHash, block.getBody().getTransactions());
     updater.putTransactionReceipts(blockHash, transactionReceipts);
     maybeTotalDifficulty.ifPresent(
         totalDifficulty -> updater.putTotalDifficulty(blockHash, totalDifficulty));
@@ -665,7 +669,7 @@ public class DefaultBlockchain implements MutableBlockchain {
       if (indexTransactions) {
         final List<Hash> listOfTxHashes =
             body.getEncodedTransactions().stream().map(Hash::hash).toList();
-        indexTransactionsForBlock(updater, blockHash, listOfTxHashes);
+        indexTransactionHashesForBlock(updater, blockHash, listOfTxHashes);
       }
     }
     updater.setChainHead(chainHeader.getBlockHash());
@@ -770,11 +774,8 @@ public class DefaultBlockchain implements MutableBlockchain {
     updater.putBlockHash(blockWithReceipts.getNumber(), newBlockHash);
     updater.setChainHead(newBlockHash);
     if (transactionIndexing) {
-      final List<Hash> listOfTxHashes =
-          blockWithReceipts.getBlock().getBody().getTransactions().stream()
-              .map(Transaction::getHash)
-              .toList();
-      indexTransactionsForBlock(updater, newBlockHash, listOfTxHashes);
+      indexTransactionsForBlock(
+          updater, newBlockHash, blockWithReceipts.getBlock().getBody().getTransactions());
     }
     gasUsedCounter.inc(blockWithReceipts.getHeader().getGasUsed());
     numberOfTransactionsCounter.inc(
@@ -863,9 +864,7 @@ public class DefaultBlockchain implements MutableBlockchain {
     // Update indexed transactions
     newTransactions.forEach(
         (blockHash, transactionsInBlock) -> {
-          final List<Hash> listOfTxHashes =
-              transactionsInBlock.stream().map(Transaction::getHash).toList();
-          indexTransactionsForBlock(updater, blockHash, listOfTxHashes);
+          indexTransactionsForBlock(updater, blockHash, transactionsInBlock);
           // Don't remove transactions that are being re-indexed.
           removedTransactions.removeAll(transactionsInBlock);
         });
@@ -1005,6 +1004,20 @@ public class DefaultBlockchain implements MutableBlockchain {
   }
 
   private static void indexTransactionsForBlock(
+      final BlockchainStorage.Updater updater,
+      final Hash blockHash,
+      final List<Transaction> transactions) {
+    for (int index = 0; index < transactions.size(); index++) {
+      final Transaction tx = transactions.get(index);
+      final TransactionLocation loc = new TransactionLocation(blockHash, index);
+      updater.putTransactionLocation(tx.getHash(), loc);
+      updater.putTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce(), tx.getHash());
+    }
+  }
+
+  // Used during sync where only tx hashes are available (no decoded Transaction objects).
+  // Indexes txHash→location only; sender+nonce index is not populated for this path.
+  private static void indexTransactionHashesForBlock(
       final BlockchainStorage.Updater updater, final Hash blockHash, final List<Hash> txsHashes) {
     for (int index = 0; index < txsHashes.size(); index++) {
       final TransactionLocation loc = new TransactionLocation(blockHash, index);
@@ -1016,6 +1029,7 @@ public class DefaultBlockchain implements MutableBlockchain {
       final BlockchainStorage.Updater updater, final List<Transaction> txs) {
     for (final Transaction tx : txs) {
       updater.removeTransactionLocation(tx.getHash());
+      updater.removeTransactionHashBySenderAndNonce(tx.getSender(), tx.getNonce());
     }
   }
 

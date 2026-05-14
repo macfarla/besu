@@ -181,8 +181,7 @@ public class KeyValueStoragePrefixedKeyBlockchainStorage implements BlockchainSt
   }
 
   @Override
-  public Optional<Hash> getTransactionHashBySenderAndNonce(
-      final Address sender, final long nonce) {
+  public Optional<Hash> getTransactionHashBySenderAndNonce(final Address sender, final long nonce) {
     return get(SENDER_NONCE_TO_TX_HASH_PREFIX, senderNonceKey(sender, nonce))
         .map(bytes -> Hash.wrap(Bytes32.wrap(bytes, 0)));
   }
@@ -453,7 +452,10 @@ public class KeyValueStoragePrefixedKeyBlockchainStorage implements BlockchainSt
     @Override
     public void putTransactionHashBySenderAndNonce(
         final Address sender, final long nonce, final Hash transactionHash) {
-      set(SENDER_NONCE_TO_TX_HASH_PREFIX, senderNonceKey(sender, nonce), transactionHash.getBytes());
+      set(
+          SENDER_NONCE_TO_TX_HASH_PREFIX,
+          senderNonceKey(sender, nonce),
+          transactionHash.getBytes());
     }
 
     @Override

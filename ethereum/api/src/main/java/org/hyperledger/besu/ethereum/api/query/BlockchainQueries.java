@@ -644,6 +644,15 @@ public class BlockchainQueries {
     return blockchain.getTransactionLocation(transactionHash);
   }
 
+  public Optional<TransactionWithMetadata> transactionBySenderAndNonce(
+      final Address sender, final long nonce) {
+    final Optional<Hash> maybeHash = blockchain.getTransactionHashBySenderAndNonce(sender, nonce);
+    if (maybeHash.isEmpty()) {
+      return Optional.empty();
+    }
+    return transactionByHash(maybeHash.get());
+  }
+
   /**
    * Returns the transaction receipts associated with the given block hash.
    *
