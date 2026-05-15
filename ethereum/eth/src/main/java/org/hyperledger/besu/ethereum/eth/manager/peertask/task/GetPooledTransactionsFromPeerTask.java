@@ -24,6 +24,7 @@ import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTask;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTaskValidationResponse;
 import org.hyperledger.besu.ethereum.eth.messages.GetPooledTransactionsMessage;
 import org.hyperledger.besu.ethereum.eth.messages.PooledTransactionsMessage;
+import org.hyperledger.besu.ethereum.eth.transactions.TransactionAnnouncement;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.SubProtocol;
@@ -31,16 +32,34 @@ import org.hyperledger.besu.ethereum.rlp.RLPException;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class GetPooledTransactionsFromPeerTask implements PeerTask<List<Transaction>> {
 
   private final SequencedSet<Hash> hashes;
+  // Non-empty when announcements include type and size (eth/68+), used to validate received txs.
+  private final Map<Hash, TransactionAnnouncement> announcementsByHash;
 
+  /**
+   * Constructor for use when only hashes are available (e.g. in tests). No type/size validation.
+   */
   public GetPooledTransactionsFromPeerTask(final List<Hash> hashes) {
     this.hashes = new LinkedHashSet<>(hashes);
+    this.announcementsByHash = Map.of();
+  }
+
+  /** Constructor for production use. Validates that received txs match announced type and size. */
+  public GetPooledTransactionsFromPeerTask(final List<TransactionAnnouncement> announcements) {
+    this.announcementsByHash =
+        announcements.stream()
+            .collect(
+                Collectors.toMap(TransactionAnnouncement::hash, Function.identity(), (a, b) -> a));
+    this.hashes = new LinkedHashSet<>(announcementsByHash.keySet());
   }
 
   @Override
@@ -68,6 +87,34 @@ public class GetPooledTransactionsFromPeerTask implements PeerTask<List<Transact
     if (responseTransactions.size() > hashes.size()) {
       throw new InvalidPeerTaskResponseException(
           "Response transaction count does not match request hash count");
+    }
+    if (!announcementsByHash.isEmpty()) {
+      for (final Transaction tx : responseTransactions) {
+        final TransactionAnnouncement ann = announcementsByHash.get(tx.getHash());
+        if (ann == null) {
+          continue;
+        }
+        if (!ann.type().equals(tx.getType())) {
+          throw new MalformedRlpFromPeerException(
+              "Transaction type mismatch for hash "
+                  + tx.getHash()
+                  + ": announced "
+                  + ann.type()
+                  + " but received "
+                  + tx.getType(),
+              messageData.getData());
+        }
+        if (ann.size() != tx.getSizeForAnnouncement()) {
+          throw new MalformedRlpFromPeerException(
+              "Transaction size mismatch for hash "
+                  + tx.getHash()
+                  + ": announced "
+                  + ann.size()
+                  + " but received "
+                  + tx.getSizeForAnnouncement(),
+              messageData.getData());
+        }
+      }
     }
     return responseTransactions;
   }

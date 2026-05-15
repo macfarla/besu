@@ -16,7 +16,6 @@ package org.hyperledger.besu.ethereum.eth.transactions;
 
 import static java.time.Instant.now;
 
-import org.hyperledger.besu.datatypes.TransactionType;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 import org.hyperledger.besu.ethereum.eth.manager.task.BufferedGetPooledTransactionsFromPeerFetcher;
@@ -37,10 +36,6 @@ public class NewPooledTransactionHashesMessageProcessor {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(NewPooledTransactionHashesMessageProcessor.class);
-
-  // A pooled blob tx must contain at least 1 blob (131072 bytes) plus commitment, proof, and tx
-  // body overhead. Any BLOB type announcement smaller than this is impossible.
-  static final long MIN_BLOB_TX_ANNOUNCED_SIZE = 131072L;
 
   static final String METRIC_LABEL = "new_pooled_transaction_hashes";
 
@@ -98,19 +93,6 @@ public class NewPooledTransactionHashesMessageProcessor {
     try {
       final List<TransactionAnnouncement> incomingAnnouncements =
           transactionsMessage.pendingTransactionAnnouncements();
-
-      for (final TransactionAnnouncement announcement : incomingAnnouncements) {
-        if (TransactionType.BLOB.equals(announcement.type())
-            && announcement.size() < MIN_BLOB_TX_ANNOUNCED_SIZE) {
-          LOG.debug(
-              "Blob transaction announcement has impossible size {} (min {}), disconnecting peer: {}",
-              announcement.size(),
-              MIN_BLOB_TX_ANNOUNCED_SIZE,
-              peer);
-          peer.disconnect(DisconnectReason.BREACH_OF_PROTOCOL_MALFORMED_MESSAGE_RECEIVED);
-          return;
-        }
-      }
 
       final var freshAnnouncements =
           transactionTracker.receivedAnnouncements(peer, incomingAnnouncements);
