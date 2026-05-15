@@ -160,8 +160,8 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions, Cloneable
   }
 
   @Override
-  public EthashConfigOptions getEthashConfigOptions() {
-    return EthashConfigOptions.DEFAULT;
+  public FixedDifficultyConfigOptions getFixedDifficultyConfigOptions() {
+    return FixedDifficultyConfigOptions.DEFAULT;
   }
 
   @Override
@@ -371,7 +371,7 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions, Cloneable
       builder.put("clique", getCliqueConfigOptions().asMap());
     }
     if (isEthHash()) {
-      builder.put("ethash", getEthashConfigOptions().asMap());
+      builder.put("ethash", getFixedDifficultyConfigOptions().asMap());
     }
     if (isIbftLegacy()) {
       builder.put("ibft", getIbftLegacyConfigOptions().asMap());

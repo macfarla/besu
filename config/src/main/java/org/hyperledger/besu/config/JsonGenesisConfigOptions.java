@@ -208,10 +208,10 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public EthashConfigOptions getEthashConfigOptions() {
+  public FixedDifficultyConfigOptions getFixedDifficultyConfigOptions() {
     return JsonUtil.getObjectNode(configRoot, ETHASH_CONFIG_KEY)
-        .map(EthashConfigOptions::new)
-        .orElse(EthashConfigOptions.DEFAULT);
+        .map(FixedDifficultyConfigOptions::new)
+        .orElse(FixedDifficultyConfigOptions.DEFAULT);
   }
 
   @Override
@@ -492,7 +492,7 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
       builder.put("clique", getCliqueConfigOptions().asMap());
     }
     if (isEthHash()) {
-      builder.put("ethash", getEthashConfigOptions().asMap());
+      builder.put("ethash", getFixedDifficultyConfigOptions().asMap());
     }
     if (isIbftLegacy()) {
       builder.put("ibft", getIbftLegacyConfigOptions().asMap());
