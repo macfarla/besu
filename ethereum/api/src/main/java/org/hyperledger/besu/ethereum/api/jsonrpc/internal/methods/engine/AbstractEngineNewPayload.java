@@ -64,6 +64,7 @@ import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.mainnet.feemarket.ExcessBlobGasCalculator;
 import org.hyperledger.besu.ethereum.rlp.RLPException;
 import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.provider.PathBasedWorldStateProvider;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.exception.StorageException;
 
@@ -87,6 +88,16 @@ public abstract class AbstractEngineNewPayload extends ExecutionEngineJsonRpcMet
   private static final Hash OMMERS_HASH_CONSTANT = Hash.EMPTY_LIST_HASH;
   private static final Logger LOG = LoggerFactory.getLogger(AbstractEngineNewPayload.class);
   private static final BlockHeaderFunctions headerFunctions = new MainnetBlockHeaderFunctions();
+
+  /**
+   * Maximum number of cached world-state layers before engine_newPayload starts returning SYNCING.
+   * Under normal operation (FCU advancing each slot) the layer count stays in the single digits.
+   * This threshold protects against the runaway accumulation that occurs when the forkchoice head
+   * stalls while new payloads keep arriving, which otherwise leads to unbounded heap growth and
+   * eventual OOM (besu-eth/besu#10498).
+   */
+  static final int MAX_CACHED_WORLD_STATE_LAYERS = 128;
+
   private final MergeMiningCoordinator mergeCoordinator;
   private final EthPeers ethPeers;
   private long lastExecutionTimeInNs = 0L;
@@ -234,6 +245,18 @@ public abstract class AbstractEngineNewPayload extends ExecutionEngineJsonRpcMet
     if (mergeContext.get().isSyncing()) {
       LOG.debug("We are syncing");
       return respondWith(reqId, blockParam, null, SYNCING);
+    }
+
+    if (protocolContext.getWorldStateArchive() instanceof PathBasedWorldStateProvider provider) {
+      final int layerCount = provider.getCachedWorldStorageManager().cachedLayerCount();
+      if (layerCount > MAX_CACHED_WORLD_STATE_LAYERS) {
+        LOG.warn(
+            "Returning SYNCING for engine_newPayload: {} cached world state layers exceeds"
+                + " threshold of {}. Forkchoice head may be stalled.",
+            layerCount,
+            MAX_CACHED_WORLD_STATE_LAYERS);
+        return respondWith(reqId, blockParam, null, SYNCING);
+      }
     }
 
     final List<Transaction> transactions;

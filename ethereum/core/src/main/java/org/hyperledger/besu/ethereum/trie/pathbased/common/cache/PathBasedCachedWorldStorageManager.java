@@ -206,6 +206,10 @@ public abstract class PathBasedCachedWorldStorageManager implements StorageSubsc
     return cachedWorldStatesByHash.containsKey(blockHash);
   }
 
+  public int cachedLayerCount() {
+    return cachedWorldStatesByHash.size();
+  }
+
   public void reset() {
     this.cachedWorldStatesByHash.clear();
   }

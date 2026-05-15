@@ -59,6 +59,8 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.WithdrawalsValidator;
 import org.hyperledger.besu.ethereum.mainnet.requests.ProhibitedRequestValidator;
 import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.cache.PathBasedCachedWorldStorageManager;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.provider.PathBasedWorldStateProvider;
 import org.hyperledger.besu.plugin.services.exception.StorageException;
 import org.hyperledger.besu.plugin.services.rpc.RpcResponseType;
 
@@ -302,6 +304,50 @@ public abstract class AbstractEngineNewPayloadTest extends AbstractScheduledApiT
     assertThat(res.getStatusAsString()).isEqualTo(SYNCING.name());
     assertThat(res.getLatestValidHash()).isEmpty();
     verify(engineCallListener, times(1)).executionEngineCalled();
+  }
+
+  @Test
+  public void shouldReturnSyncingWhenCachedLayerCountExceedsThreshold() {
+    BlockHeader mockHeader = createBlockHeader(Optional.empty());
+
+    PathBasedWorldStateProvider worldStateProvider = mock(PathBasedWorldStateProvider.class);
+    PathBasedCachedWorldStorageManager cacheManager =
+        mock(PathBasedCachedWorldStorageManager.class);
+    when(protocolContext.getWorldStateArchive()).thenReturn(worldStateProvider);
+    when(worldStateProvider.getCachedWorldStorageManager()).thenReturn(cacheManager);
+    when(cacheManager.cachedLayerCount())
+        .thenReturn(AbstractEngineNewPayload.MAX_CACHED_WORLD_STATE_LAYERS + 1);
+
+    var resp = resp(mockEnginePayload(mockHeader, emptyList()));
+
+    EnginePayloadStatusResult res = fromSuccessResp(resp);
+    assertThat(res.getStatusAsString()).isEqualTo(SYNCING.name());
+    assertThat(res.getLatestValidHash()).isEmpty();
+    assertThat(res.getError()).isNull();
+    verify(engineCallListener, times(1)).executionEngineCalled();
+  }
+
+  @Test
+  public void shouldNotReturnSyncingWhenCachedLayerCountIsAtThreshold() {
+    BlockHeader mockHeader =
+        setupValidPayload(
+            new BlockProcessingResult(Optional.of(new BlockProcessingOutputs(null, List.of()))),
+            Optional.empty());
+    lenient()
+        .when(blockchain.getBlockHeader(mockHeader.getParentHash()))
+        .thenReturn(Optional.of(mock(BlockHeader.class)));
+
+    PathBasedWorldStateProvider worldStateProvider = mock(PathBasedWorldStateProvider.class);
+    PathBasedCachedWorldStorageManager cacheManager =
+        mock(PathBasedCachedWorldStorageManager.class);
+    when(protocolContext.getWorldStateArchive()).thenReturn(worldStateProvider);
+    when(worldStateProvider.getCachedWorldStorageManager()).thenReturn(cacheManager);
+    when(cacheManager.cachedLayerCount())
+        .thenReturn(AbstractEngineNewPayload.MAX_CACHED_WORLD_STATE_LAYERS);
+
+    var resp = resp(mockEnginePayload(mockHeader, emptyList()));
+
+    assertValidResponse(mockHeader, resp);
   }
 
   @Test
