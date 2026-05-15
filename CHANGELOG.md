@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Breaking Changes
-- `debug_getRawTransaction` now rejects transaction hash parameters without a `0x` prefix with `-32602 INVALID_PARAMS`, consistent with the JSON-RPC spec and geth behaviour.
+- `debug_getRawTransaction` now rejects transaction hash parameters without a `0x` prefix with `-32602 INVALID_PARAMS`, as part of the ongoing RPC hex-only enforcement for compatibility with other ELs.
 
 ### Upcoming Breaking Changes
 - RPC changes to enhance compatibility with other ELs
