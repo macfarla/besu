@@ -19,6 +19,7 @@ import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeerImmutableAttributes;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.InvalidPeerTaskResponseException;
+import org.hyperledger.besu.ethereum.eth.manager.peertask.MalformedRlpFromPeerException;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTask;
 import org.hyperledger.besu.ethereum.eth.manager.peertask.PeerTaskValidationResponse;
 import org.hyperledger.besu.ethereum.eth.messages.GetPooledTransactionsMessage;
@@ -26,6 +27,7 @@ import org.hyperledger.besu.ethereum.eth.messages.PooledTransactionsMessage;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.SubProtocol;
+import org.hyperledger.besu.ethereum.rlp.RLPException;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,10 +56,15 @@ public class GetPooledTransactionsFromPeerTask implements PeerTask<List<Transact
   @Override
   public List<Transaction> processResponse(
       final MessageData messageData, final Set<Capability> agreedCapabilities)
-      throws InvalidPeerTaskResponseException {
+      throws InvalidPeerTaskResponseException, MalformedRlpFromPeerException {
     final PooledTransactionsMessage pooledTransactionsMessage =
         PooledTransactionsMessage.readFrom(messageData);
-    final List<Transaction> responseTransactions = pooledTransactionsMessage.transactions();
+    final List<Transaction> responseTransactions;
+    try {
+      responseTransactions = pooledTransactionsMessage.transactions();
+    } catch (RLPException e) {
+      throw new MalformedRlpFromPeerException(e, messageData.getData());
+    }
     if (responseTransactions.size() > hashes.size()) {
       throw new InvalidPeerTaskResponseException(
           "Response transaction count does not match request hash count");
