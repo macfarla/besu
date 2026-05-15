@@ -53,13 +53,21 @@ public class GetPooledTransactionsFromPeerTask implements PeerTask<List<Transact
     this.announcementsByHash = Map.of();
   }
 
-  /** Constructor for production use. Validates that received txs match announced type and size. */
-  public GetPooledTransactionsFromPeerTask(final List<TransactionAnnouncement> announcements) {
-    this.announcementsByHash =
+  private GetPooledTransactionsFromPeerTask(
+      final Map<Hash, TransactionAnnouncement> announcementsByHash) {
+    this.announcementsByHash = announcementsByHash;
+    this.hashes = new LinkedHashSet<>(announcementsByHash.keySet());
+  }
+
+  /**
+   * Factory method for production use. Validates that received txs match announced type and size.
+   */
+  public static GetPooledTransactionsFromPeerTask fromAnnouncements(
+      final List<TransactionAnnouncement> announcements) {
+    return new GetPooledTransactionsFromPeerTask(
         announcements.stream()
             .collect(
-                Collectors.toMap(TransactionAnnouncement::hash, Function.identity(), (a, b) -> a));
-    this.hashes = new LinkedHashSet<>(announcementsByHash.keySet());
+                Collectors.toMap(TransactionAnnouncement::hash, Function.identity(), (a, b) -> a)));
   }
 
   @Override

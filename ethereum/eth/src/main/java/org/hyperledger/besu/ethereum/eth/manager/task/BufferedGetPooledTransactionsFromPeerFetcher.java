@@ -113,7 +113,7 @@ public class BufferedGetPooledTransactionsFromPeerFetcher {
           .log();
 
       final GetPooledTransactionsFromPeerTask task =
-          new GetPooledTransactionsFromPeerTask(announcements);
+          GetPooledTransactionsFromPeerTask.fromAnnouncements(announcements);
 
       final PeerTaskExecutorResult<List<Transaction>> taskResult =
           ethContext.getPeerTaskExecutor().executeAgainstPeer(task, peer);
