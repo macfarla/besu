@@ -41,10 +41,24 @@ public class DebugGetRawTransaction implements JsonRpcMethod {
 
   @Override
   public JsonRpcResponse response(final JsonRpcRequestContext requestContext) {
+    final String rawHash;
+    try {
+      rawHash = requestContext.getRequiredParameter(0, String.class);
+    } catch (JsonRpcParameterException e) {
+      throw new InvalidJsonRpcParameters(
+          "Invalid transaction hash parameter (index 0)",
+          RpcErrorType.INVALID_TRANSACTION_HASH_PARAMS,
+          e);
+    }
+    if (!rawHash.startsWith("0x") && !rawHash.startsWith("0X")) {
+      throw new InvalidJsonRpcParameters(
+          "Invalid transaction hash parameter (index 0): must have 0x prefix",
+          RpcErrorType.INVALID_TRANSACTION_HASH_PARAMS);
+    }
     final Hash txHash;
     try {
-      txHash = requestContext.getRequiredParameter(0, Hash.class);
-    } catch (JsonRpcParameterException e) {
+      txHash = Hash.fromHexString(rawHash);
+    } catch (IllegalArgumentException e) {
       throw new InvalidJsonRpcParameters(
           "Invalid transaction hash parameter (index 0)",
           RpcErrorType.INVALID_TRANSACTION_HASH_PARAMS,
