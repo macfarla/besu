@@ -83,6 +83,7 @@ public class EngineGetPayloadResultV6 {
     return executionRequests;
   }
 
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   @JsonPropertyOrder({
     "parentHash",
     "feeRecipient",
@@ -233,7 +234,6 @@ public class EngineGetPayloadResultV6 {
     }
 
     @JsonGetter(value = "feeRecipient")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getFeeRecipient() {
       return feeRecipient;
     }
@@ -249,13 +249,11 @@ public class EngineGetPayloadResultV6 {
     }
 
     @JsonGetter(value = "blockAccessList")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getBlockAccessList() {
       return blockAccessList;
     }
 
     @JsonGetter(value = "slotNumber")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getSlotNumber() {
       return slotNumber;
     }
