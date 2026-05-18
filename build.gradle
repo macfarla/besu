@@ -236,7 +236,9 @@ configure(allprojects - project(':platform')) {
   }
 
 
-  apply plugin: 'com.diffplug.spotless'
+  if (System.getenv('CI') || project.path != ':ethereum:referencetests') {
+    apply plugin: 'com.diffplug.spotless'
+  }
   spotless {
     java {
       // This path needs to be relative to each project
