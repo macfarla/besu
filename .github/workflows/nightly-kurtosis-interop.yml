@@ -64,21 +64,20 @@ jobs:
 
           for i in $(seq 1 120); do
             sleep 10
-            RESPONSE=$(curl -sf "http://127.0.0.1:${ASSERTOOR_PORT}/api/v1/tests" 2>/dev/null) || continue
+            RESPONSE=$(curl -sf "http://127.0.0.1:${ASSERTOOR_PORT}/api/v1/test_runs" 2>/dev/null) || continue
 
             ALL_DONE=true
             ANY_FAILED=false
-            TEST_COUNT=0
-            while IFS= read -r test; do
-              TEST_COUNT=$((TEST_COUNT + 1))
-              RESULT=$(echo "$test" | jq -r '.result // .status')
-              case "$RESULT" in
-                "success") ;;
-                "failure") ANY_FAILED=true ;;
-                *) ALL_DONE=false ;;
+            RUN_COUNT=0
+            while IFS= read -r STATUS; do
+              RUN_COUNT=$((RUN_COUNT + 1))
+              case "$STATUS" in
+                "success"|"skipped") ;;
+                "failure"|"aborted") ANY_FAILED=true ;;
+                *) ALL_DONE=false ;;  # pending, running
               esac
-            done < <(echo "$RESPONSE" | jq -c '.[]')
-            if [ "$TEST_COUNT" -eq 0 ]; then
+            done < <(echo "$RESPONSE" | jq -r '.data[].status')
+            if [ "$RUN_COUNT" -eq 0 ]; then
               ALL_DONE=false
             fi
 
