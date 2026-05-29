@@ -68,7 +68,9 @@ jobs:
 
             ALL_DONE=true
             ANY_FAILED=false
+            TEST_COUNT=0
             while IFS= read -r test; do
+              TEST_COUNT=$((TEST_COUNT + 1))
               RESULT=$(echo "$test" | jq -r '.result // .status')
               case "$RESULT" in
                 "success") ;;
@@ -76,6 +78,9 @@ jobs:
                 *) ALL_DONE=false ;;
               esac
             done < <(echo "$RESPONSE" | jq -c '.[]')
+            if [ "$TEST_COUNT" -eq 0 ]; then
+              ALL_DONE=false
+            fi
 
             if $ANY_FAILED; then
               echo "One or more assertoor tests failed"
