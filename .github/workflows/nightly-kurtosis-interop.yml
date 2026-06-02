@@ -65,7 +65,7 @@ jobs:
 
       - name: Start Kurtosis network
         run: |
-          kurtosis run github.com/ethpandaops/ethereum-package \
+          kurtosis run github.com/ethpandaops/ethereum-package@994a63d39f35648eebb7bd255e6690a144842af3 \
             --enclave "$ENCLAVE_NAME" \
             --args-file network_params.yaml \
             --image-download always
