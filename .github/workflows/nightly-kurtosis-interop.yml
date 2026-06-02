@@ -23,10 +23,12 @@ jobs:
         run: echo "BESU_IMAGE=docker.io/${{ secrets.DOCKER_ORG }}/besu:develop" >> "$GITHUB_ENV"
 
       - name: Install Kurtosis CLI
+        env:
+          KURTOSIS_VERSION: "1.18.3"
         run: |
-          echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
-          sudo apt-get update -q
-          sudo apt-get install -y kurtosis-cli
+          curl -Lo kurtosis.deb "https://github.com/kurtosis-tech/kurtosis/releases/download/${KURTOSIS_VERSION}/kurtosis-cli_${KURTOSIS_VERSION}_linux_amd64.deb"
+          sudo dpkg -i kurtosis.deb
+          rm kurtosis.deb
 
       - name: Write network params
         run: |
