@@ -4,6 +4,16 @@ on:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
+    inputs:
+      besu_image:
+        description: 'Besu Docker image to test (required when running from a fork)'
+        required: false
+        type: string
+      runner:
+        description: 'Runner label (use ubuntu-latest when triggering from a fork)'
+        required: false
+        default: besu-research-ubuntu-8
+        type: string
 
 env:
   ENCLAVE_NAME: besu-cl-interop
@@ -11,7 +21,7 @@ env:
 jobs:
   kurtosis-cl-interop:
     name: "Besu CL interop (Lighthouse + Prysm)"
-    runs-on: besu-research-ubuntu-8
+    runs-on: ${{ inputs.runner || 'besu-research-ubuntu-8' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -20,7 +30,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set Besu image
-        run: echo "BESU_IMAGE=docker.io/${{ secrets.DOCKER_ORG }}/besu:develop" >> "$GITHUB_ENV"
+        run: |
+          if [ -n "${{ inputs.besu_image }}" ]; then
+            echo "BESU_IMAGE=${{ inputs.besu_image }}" >> "$GITHUB_ENV"
+          else
+            echo "BESU_IMAGE=docker.io/${{ secrets.DOCKER_ORG }}/besu:develop" >> "$GITHUB_ENV"
+          fi
 
       - name: Install Kurtosis CLI
         env:
