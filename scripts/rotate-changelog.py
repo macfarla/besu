@@ -212,6 +212,12 @@ def main() -> None:
     major, minor, *_ = version.split(".")
     release_branch = f"release-{major}.{minor}.x"
 
+    with open("CHANGELOG.md") as fh:
+        main_text = fh.read()
+
+    if f"\n## {version}\n" in main_text:
+        sys.exit(f"ERROR: ## {version} already exists in CHANGELOG.md — already rotated?")
+
     print(f"Rotating changelog for {version} (repo: {repo})", file=sys.stderr)
 
     # --- Fetch ---
@@ -224,9 +230,6 @@ def main() -> None:
         print(f"WARNING: could not fetch CHANGELOG from {release_branch}; "
               f"assuming no burnin entries", file=sys.stderr)
         release_text = tag_text
-
-    with open("CHANGELOG.md", encoding="utf-8") as fh:
-        main_text = fh.read()
 
     # --- Parse ---
     tag_sections     = parse_unreleased(tag_text)
