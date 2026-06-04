@@ -144,27 +144,34 @@ def new_bullets(base: dict[str, list[str]], updated: dict[str, list[str]]) -> di
 # ---------------------------------------------------------------------------
 
 def render_unreleased(
-    released_sections: dict[str, list[str]],
+    tag_sections: dict[str, list[str]],
     post_tag: dict[str, list[str]],
 ) -> str:
     """
     Build the new ## Unreleased block.
 
     - Breaking Changes: only genuinely new post-tag entries.
-    - Upcoming Breaking Changes: carry ALL entries forward from the released
-      version (they are still upcoming) plus any new post-tag ones.
-    - Other sections: only new post-tag entries.
+    - Upcoming Breaking Changes: carry ALL entries forward from the tag
+      (they are still upcoming) plus any new post-tag ones.
+    - Performance: only emitted when there are entries (optional section).
+    - Bug fixes / Additions and Improvements: always emitted as scaffolding.
     """
+    # Sections always included as scaffolding even when empty
+    SCAFFOLD = {"### Breaking Changes", "### Bug fixes", "### Additions and Improvements"}
+
     lines = ["## Unreleased", ""]
 
     for sub in SUBSECTIONS:
         if sub == "### Upcoming Breaking Changes":
-            # Carry forward all from the released version + new post-tag ones
-            carried = released_sections.get(sub, [])
+            # Carry forward all from the tag + new post-tag ones
+            carried = tag_sections.get(sub, [])
             new = [b for b in post_tag.get(sub, []) if b not in set(carried)]
             bullets = carried + new
         else:
             bullets = post_tag.get(sub, [])
+
+        if not bullets and sub not in SCAFFOLD:
+            continue  # skip optional empty sections (e.g. ### Performance)
 
         lines.append(sub)
         for b in bullets:
@@ -212,7 +219,7 @@ def main() -> None:
     major, minor, *_ = version.split(".")
     release_branch = f"release-{major}.{minor}.x"
 
-    with open("CHANGELOG.md") as fh:
+    with open("CHANGELOG.md", encoding="utf-8") as fh:
         main_text = fh.read()
 
     if f"\n## {version}\n" in main_text:
@@ -253,7 +260,7 @@ def main() -> None:
             print(f"    [burnin]   {sub}: {b[:70].splitlines()[0]}", file=sys.stderr)
 
     # --- Render ---
-    unreleased_block = render_unreleased(release_sections, post_tag_entries)
+    unreleased_block = render_unreleased(tag_sections, post_tag_entries)
     version_block    = render_version(version, tag_sections, burnin_entries)
     remainder        = get_remainder(main_text)
 
