@@ -225,7 +225,7 @@ def main() -> None:
               f"assuming no burnin entries", file=sys.stderr)
         release_text = tag_text
 
-    with open("CHANGELOG.md") as fh:
+    with open("CHANGELOG.md", encoding="utf-8") as fh:
         main_text = fh.read()
 
     # --- Parse ---
@@ -259,7 +259,7 @@ def main() -> None:
     if args.dry_run:
         print(new_changelog)
     else:
-        with open("CHANGELOG.md", "w") as fh:
+        with open("CHANGELOG.md", "w", encoding="utf-8") as fh:
             fh.write(new_changelog)
         print("CHANGELOG.md updated.", file=sys.stderr)
         print(f"\nNext steps:", file=sys.stderr)
