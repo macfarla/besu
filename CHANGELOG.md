@@ -3,7 +3,9 @@
 ## Unreleased
 
 ### Breaking Changes
-
+- RPC changes to enhance compatibility with other ELs
+  - The block parameter is now optional on `eth_getBalance`, `eth_getCode`, `eth_getStorageAt`, `eth_getTransactionCount`, `eth_getProof`, and `eth_getStorageValues`; when omitted it now defaults to `latest`, matching other ELs. Previously a missing block parameter was rejected. [#10587](https://github.com/besu-eth/besu/pull/10587)
+    
 ### Upcoming Breaking Changes
 - Sunsetting features - for more context on the reasoning behind the deprecation of these features, including alternative options, read [this blog post](https://www.lfdecentralizedtrust.org/blog/sunsetting-tessera-and-simplifying-hyperledger-besu)
   - Proof of Work consensus (PoW)
