@@ -21,6 +21,7 @@
 - Fix WebSocket RPC event-loop stall caused by slow clients filling the TCP write queue. [#10354](https://github.com/besu-eth/besu/pull/10354)
 
 ### Additions and Improvements
+- Improve `LayeredKeyValueStorage.isClosed()` from O(depth) to O(1) by eliminating unconditional recursive parent-chain walk, reducing CPU overhead at large layer depths. [#10603](https://github.com/besu-eth/besu/pull/10603)
 - Add `eth_getTransactionBySenderAndNonce` JSON-RPC method to look up a transaction by sender address and nonce (pending or mined).
   - Mined transaction lookup uses a sender+nonce index, enabled by default (`--tx-sender-nonce-index-enabled=false` to disable). Nodes performing a FULL sync from scratch may want to disable this to avoid the storage overhead of indexing historical transactions. [#10501](https://github.com/besu-eth/besu/pull/10501)
 
