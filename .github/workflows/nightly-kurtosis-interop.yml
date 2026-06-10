@@ -18,14 +18,14 @@ on:
 jobs:
   kurtosis-cl-interop:
     name: "Besu CL interop (Lighthouse + Prysm)"
-    runs-on: ${{ inputs.runner || 'besu-research-ubuntu-8' }}
+    runs-on: ${{ github.event.inputs.runner || 'besu-research-ubuntu-8' }}
     timeout-minutes: 60
     permissions:
       contents: read
     steps:
       - name: Set Besu image
         run: |
-          IMAGE="${{ inputs.besu_image }}"
+          IMAGE="${{ github.event.inputs.besu_image }}"
           echo "BESU_IMAGE=${IMAGE:-docker.io/hyperledger/besu:develop}" >> "$GITHUB_ENV"
 
       - name: Write network params
