@@ -147,16 +147,20 @@ def new_bullets(base: dict[str, list[str]], updated: dict[str, list[str]]) -> di
 def render_unreleased(
     tag_sections: dict[str, list[str]],
     post_tag: dict[str, list[str]],
+    release_sections: dict[str, list[str]] | None = None,
 ) -> str:
     """
     Build the new ## Unreleased block.
 
     - Breaking Changes: only genuinely new post-tag entries.
     - Upcoming Breaking Changes: carry ALL entries forward from the tag
-      (they are still upcoming) plus any new post-tag ones.
+      (they are still upcoming) plus any from the release and new post-tag ones.
     - Performance: only emitted when there are entries (optional section).
     - Bug fixes / Additions and Improvements: always emitted as scaffolding.
     """
+    if release_sections is None:
+        release_sections = {}
+
     # Sections always included as scaffolding even when empty
     SCAFFOLD = {"### Breaking Changes", "### Bug fixes", "### Additions and Improvements"}
 
@@ -164,9 +168,14 @@ def render_unreleased(
 
     for sub in SUBSECTIONS:
         if sub == "### Upcoming Breaking Changes":
-            # Carry forward all from the tag + new post-tag ones
-            carried = tag_sections.get(sub, [])
-            new = [b for b in post_tag.get(sub, []) if b not in set(carried)]
+            # Carry forward all from the tag, plus any from the release, plus new post-tag ones
+            carried = list(tag_sections.get(sub, []))
+            carried_set = set(carried)
+            for b in release_sections.get(sub, []):
+                if b not in carried_set:
+                    carried.append(b)
+                    carried_set.add(b)
+            new = [b for b in post_tag.get(sub, []) if b not in carried_set]
             bullets = carried + new
         else:
             bullets = post_tag.get(sub, [])
@@ -186,12 +195,27 @@ def render_version(
     version: str,
     tag_sections: dict[str, list[str]],
     burnin: dict[str, list[str]],
+    prev_tag_sections: dict[str, list[str]] | None = None,
 ) -> str:
     """Build the ## <version> block."""
+    if prev_tag_sections is None:
+        prev_tag_sections = {}
+
     lines = [f"## {version}", ""]
 
     for sub in SUBSECTIONS:
-        bullets = tag_sections.get(sub, []) + burnin.get(sub, [])
+        if sub == "### Upcoming Breaking Changes":
+            # Carry forward all upcoming breaking changes from the previous release
+            # plus any new ones in this release and burnin
+            carried = list(prev_tag_sections.get(sub, []))
+            carried_set = set(carried)
+            for b in tag_sections.get(sub, []) + burnin.get(sub, []):
+                if b not in carried_set:
+                    carried.append(b)
+                    carried_set.add(b)
+            bullets = carried
+        else:
+            bullets = tag_sections.get(sub, []) + burnin.get(sub, [])
         if not bullets:
             continue
         lines.append(sub)
@@ -309,8 +333,8 @@ def main() -> None:
             print(f"    [burnin]   {sub}: {b[:70].splitlines()[0]}", file=sys.stderr)
 
     # --- Render ---
-    unreleased_block = render_unreleased(tag_sections, post_tag_entries)
-    version_block    = render_version(version, new_in_release, burnin_entries)
+    unreleased_block = render_unreleased(tag_sections, post_tag_entries, new_in_release)
+    version_block    = render_version(version, new_in_release, burnin_entries, prev_tag_sections)
     remainder        = get_remainder(main_text)
 
     new_changelog = "# Changelog\n\n" + unreleased_block + "\n" + version_block + "\n" + remainder
