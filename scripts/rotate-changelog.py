@@ -220,7 +220,7 @@ def main() -> None:
 
     version = args.version
     repo = args.repo
-    major, minor, *_ = version.split(".")
+    major, minor, patch = version.split(".")
     release_branch = f"release-{major}.{minor}.x"
 
     with open("CHANGELOG.md", encoding="utf-8") as fh:
@@ -232,6 +232,7 @@ def main() -> None:
     print(f"Rotating changelog for {version} (repo: {repo})", file=sys.stderr)
 
     # --- Fetch ---
+    using_local = False
     if args.commit:
         ref = args.commit
         print(f"  Using commit {ref} as release ref (pre-tag)", file=sys.stderr)
@@ -241,30 +242,61 @@ def main() -> None:
     else:
         tag_text = gh_fetch_changelog(version, repo)
         if tag_text is None:
-            print(f"  Tag '{version}' not found; falling back to HEAD of main", file=sys.stderr)
-            tag_text = gh_fetch_changelog("HEAD", repo)
-        if tag_text is None:
-            sys.exit(f"ERROR: could not fetch CHANGELOG at tag '{version}' or HEAD from {repo}")
+            # Tag doesn't exist yet — the local CHANGELOG is the pre-tag state.
+            # Main is the release branch; whatever is in Unreleased now becomes the release.
+            print(f"  Tag '{version}' not found; using local CHANGELOG as pre-tag state", file=sys.stderr)
+            tag_text = main_text
+            using_local = True
 
-    release_text = gh_fetch_changelog(release_branch, repo)
-    if release_text is None:
-        print(f"WARNING: could not fetch CHANGELOG from {release_branch}; "
-              f"assuming no burnin entries", file=sys.stderr)
-        release_text = tag_text
+    if using_local:
+        # No separate release branch — no burnin entries possible yet
+        release_text = main_text
+    else:
+        release_text = gh_fetch_changelog(release_branch, repo)
+        if release_text is None:
+            print(f"WARNING: could not fetch CHANGELOG from {release_branch}; "
+                  f"assuming no burnin entries", file=sys.stderr)
+            release_text = tag_text
 
     # --- Parse ---
     tag_sections     = parse_unreleased(tag_text)
     release_sections = parse_unreleased(release_text)
     main_sections    = parse_unreleased(main_text)
 
+    # For patch releases the release branch is never rotated between patches, so
+    # tag_sections contains the previous patch's content plus new burnin entries.
+    # Fetch the previous patch tag and subtract it so the version block only shows
+    # what's new in this release.
+    empty_sections: dict[str, list[str]] = {h: [] for h in SUBSECTIONS}
+    if int(patch) > 0:
+        prev_version = f"{major}.{minor}.{int(patch) - 1}"
+        print(f"  Patch release — fetching {prev_version} tag as baseline", file=sys.stderr)
+        prev_tag_text = gh_fetch_changelog(prev_version, repo)
+        if prev_tag_text is None:
+            print(f"  WARNING: could not fetch {prev_version} tag; version block may contain duplicates",
+                  file=sys.stderr)
+            prev_tag_sections = empty_sections
+        else:
+            prev_tag_sections = parse_unreleased(prev_tag_text)
+    else:
+        prev_tag_sections = empty_sections
+
+    new_in_release = new_bullets(prev_tag_sections, tag_sections)
+
     # --- Diff ---
     post_tag_entries = new_bullets(tag_sections, main_sections)
     burnin_entries   = new_bullets(tag_sections, release_sections)
 
+    n_new  = sum(len(v) for v in new_in_release.values())
     n_post = sum(len(v) for v in post_tag_entries.values())
     n_burn = sum(len(v) for v in burnin_entries.values())
-    print(f"  Post-tag entries  (→ new Unreleased):   {n_post}", file=sys.stderr)
-    print(f"  Burnin entries    (→ {version} section): {n_burn}", file=sys.stderr)
+    n_tag  = sum(len(v) for v in tag_sections.values())
+    n_prev = sum(len(v) for v in prev_tag_sections.values())
+    print(f"  tag entries (raw):                       {n_tag}", file=sys.stderr)
+    print(f"  prev-tag entries (baseline):             {n_prev}", file=sys.stderr)
+    print(f"  New in release   (→ {version} section): {n_new}", file=sys.stderr)
+    print(f"  Post-tag entries (→ new Unreleased):     {n_post}", file=sys.stderr)
+    print(f"  Burnin entries   (→ {version} section):  {n_burn}", file=sys.stderr)
 
     for sub, bullets in post_tag_entries.items():
         for b in bullets:
@@ -275,13 +307,14 @@ def main() -> None:
 
     # --- Render ---
     unreleased_block = render_unreleased(tag_sections, post_tag_entries)
-    version_block    = render_version(version, tag_sections, burnin_entries)
+    version_block    = render_version(version, new_in_release, burnin_entries)
     remainder        = get_remainder(main_text)
 
     new_changelog = "# Changelog\n\n" + unreleased_block + "\n" + version_block + "\n" + remainder
 
     if args.dry_run:
-        print(new_changelog)
+        print(unreleased_block)
+        print(version_block)
     else:
         with open("CHANGELOG.md", "w", encoding="utf-8") as fh:
             fh.write(new_changelog)
