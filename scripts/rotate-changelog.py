@@ -3,10 +3,11 @@
 Rotate CHANGELOG.md after a release.
 
 Usage:
-    python3 scripts/rotate-changelog.py <version> [--repo owner/repo] [--dry-run]
+    python3 scripts/rotate-changelog.py <version> [commit] [--repo owner/repo] [--dry-run]
 
-Example:
-    python3 scripts/rotate-changelog.py 26.6.0
+Examples:
+    python3 scripts/rotate-changelog.py 26.6.1 baa7b0b   # pre-tag: use specific commit
+    python3 scripts/rotate-changelog.py 26.6.0            # post-tag: uses existing tag (or HEAD)
 
 What it does:
   1. Fetches CHANGELOG.md at the release tag from GitHub
@@ -209,6 +210,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", help="Release version, e.g. 26.6.0")
+    parser.add_argument("commit", nargs="?",
+                        help="Commit SHA to use as the release ref (for pre-tag rotation). "
+                             "Omit to use the existing tag, or HEAD if the tag does not exist yet.")
     parser.add_argument("--repo", default="besu-eth/besu")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the new CHANGELOG to stdout instead of writing it")
@@ -228,9 +232,19 @@ def main() -> None:
     print(f"Rotating changelog for {version} (repo: {repo})", file=sys.stderr)
 
     # --- Fetch ---
-    tag_text = gh_fetch_changelog(version, repo)
-    if tag_text is None:
-        sys.exit(f"ERROR: could not fetch CHANGELOG at tag '{version}' from {repo}")
+    if args.commit:
+        ref = args.commit
+        print(f"  Using commit {ref} as release ref (pre-tag)", file=sys.stderr)
+        tag_text = gh_fetch_changelog(ref, repo)
+        if tag_text is None:
+            sys.exit(f"ERROR: could not fetch CHANGELOG at commit '{ref}' from {repo}")
+    else:
+        tag_text = gh_fetch_changelog(version, repo)
+        if tag_text is None:
+            print(f"  Tag '{version}' not found; falling back to HEAD of main", file=sys.stderr)
+            tag_text = gh_fetch_changelog("HEAD", repo)
+        if tag_text is None:
+            sys.exit(f"ERROR: could not fetch CHANGELOG at tag '{version}' or HEAD from {repo}")
 
     release_text = gh_fetch_changelog(release_branch, repo)
     if release_text is None:
