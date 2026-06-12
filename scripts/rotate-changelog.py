@@ -232,13 +232,14 @@ def main() -> None:
     print(f"Rotating changelog for {version} (repo: {repo})", file=sys.stderr)
 
     # --- Fetch ---
-    using_local = False
+    pre_tag = False
     if args.commit:
         ref = args.commit
         print(f"  Using commit {ref} as release ref (pre-tag)", file=sys.stderr)
         tag_text = gh_fetch_changelog(ref, repo)
         if tag_text is None:
             sys.exit(f"ERROR: could not fetch CHANGELOG at commit '{ref}' from {repo}")
+        pre_tag = True
     else:
         tag_text = gh_fetch_changelog(version, repo)
         if tag_text is None:
@@ -246,9 +247,9 @@ def main() -> None:
             # Main is the release branch; whatever is in Unreleased now becomes the release.
             print(f"  Tag '{version}' not found; using local CHANGELOG as pre-tag state", file=sys.stderr)
             tag_text = main_text
-            using_local = True
+            pre_tag = True
 
-    if using_local:
+    if pre_tag:
         # No separate release branch — no burnin entries possible yet
         release_text = main_text
     else:
@@ -284,8 +285,10 @@ def main() -> None:
     new_in_release = new_bullets(prev_tag_sections, tag_sections)
 
     # --- Diff ---
-    post_tag_entries = new_bullets(tag_sections, main_sections)
-    burnin_entries   = new_bullets(tag_sections, release_sections)
+    post_tag_raw   = new_bullets(tag_sections, main_sections)
+    burnin_entries = new_bullets(tag_sections, release_sections)
+    # Entries that appear in both post-tag and burnin belong to the release, not to Unreleased
+    post_tag_entries = new_bullets(burnin_entries, post_tag_raw)
 
     n_new  = sum(len(v) for v in new_in_release.values())
     n_post = sum(len(v) for v in post_tag_entries.values())
