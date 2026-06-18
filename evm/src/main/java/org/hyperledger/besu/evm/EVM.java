@@ -229,15 +229,13 @@ public class EVM {
   // name of performance. This is one of the hottest sections of code.
   //
   // Please benchmark before refactoring.
+  @SuppressWarnings(
+      "ReferenceEquality") // NO_TRACING is a singleton sentinel; reference equality is intentional
   public void runToHalt(final MessageFrame frame, @NonNull final OperationTracer operationTracer) {
     // do not remove assert! A single, monomorphic tracer, is allowed in the EVM execution if
     // tracing is disabled for
     // optimization purposes
-    @SuppressWarnings(
-        "ReferenceEquality") // NO_TRACING is a singleton sentinel; reference equality is
-    // intentional
-    boolean tracerIsNoOp = operationTracer == OperationTracer.NO_TRACING;
-    assert operationTracer.isEnabled() || tracerIsNoOp;
+    assert operationTracer.isEnabled() || operationTracer == OperationTracer.NO_TRACING;
 
     if (evmConfiguration.enableEvmV2()) {
       runToHaltV2(frame, operationTracer);
