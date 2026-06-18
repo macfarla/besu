@@ -111,10 +111,9 @@ public final class NewBlockHashesMessage extends AbstractMessageData {
       if (this == that) {
         return true;
       }
-      if (!(that instanceof NewBlockHashesMessage.NewBlockHash)) {
+      if (!(that instanceof NewBlockHashesMessage.NewBlockHash other)) {
         return false;
       }
-      final NewBlockHashesMessage.NewBlockHash other = (NewBlockHashesMessage.NewBlockHash) that;
       return other.hash.equals(hash) && other.number == number;
     }
 
