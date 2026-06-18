@@ -355,8 +355,8 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     this.syncState.markResyncNeeded();
     maybeAccountToRepair.ifPresent(
         address -> {
-          if (this.protocolContext.getWorldStateArchive() instanceof BonsaiWorldStateProvider) {
-            ((BonsaiWorldStateProvider) this.protocolContext.getWorldStateArchive())
+          if (this.protocolContext.getWorldStateArchive() instanceof BonsaiWorldStateProvider bonsaiWorldStateProvider) {
+            bonsaiWorldStateProvider
                 .prepareStateHealing(
                     org.hyperledger.besu.datatypes.Address.wrap(address.getBytes()), location);
           }
