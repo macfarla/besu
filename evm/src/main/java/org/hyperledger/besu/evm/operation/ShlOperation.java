@@ -49,7 +49,8 @@ public class ShlOperation extends AbstractFixedCostOperation {
    */
   public static OperationResult staticOperation(final MessageFrame frame) {
     Bytes shiftAmount = frame.popStackItem();
-    if (shiftAmount.size() > 4 && (shiftAmount = shiftAmount.trimLeadingZeros()).size() > 4) {
+    shiftAmount = shiftAmount.trimLeadingZeros();
+    if (shiftAmount.size() > 4) {
       frame.popStackItem();
       frame.pushStackItem(Bytes.EMPTY);
     } else {
