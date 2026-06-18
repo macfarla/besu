@@ -791,7 +791,7 @@ public class MessageFrame {
       final int srcSize = value.size();
       if (length > srcSize) {
         final MutableBytes paddedAnswer = MutableBytes.create((int) length);
-        if ((long) 0 < srcSize) {
+        if (0L < srcSize) {
           value.slice(0, srcSize).copyTo(paddedAnswer, (int) (length - srcSize));
         }
         setUpdatedMemory(offset, paddedAnswer.copy());

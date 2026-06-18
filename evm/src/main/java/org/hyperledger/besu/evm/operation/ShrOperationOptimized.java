@@ -89,6 +89,7 @@ public class ShrOperationOptimized extends AbstractFixedCostOperation {
    * @param shift the right shift amount in bits (0–255)
    * @return the shifted 256-bit value
    */
+  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private static Bytes shr256(final byte[] in, final int shift) {
     if (shift == 0) {
       return Bytes.wrap(in);
