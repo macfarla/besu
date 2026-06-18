@@ -54,8 +54,9 @@ public class Memory {
   }
 
   private static RuntimeException overflow(final String v) {
-    final String msg = "Memory index or length %s too large, cannot be larger than %d";
-    throw new IllegalStateException(String.format(msg, v, MAX_BYTES));
+    throw new IllegalStateException(
+        String.format(
+            "Memory index or length %s too large, cannot be larger than %d", v, MAX_BYTES));
   }
 
   private void checkByteIndex(final long v) {

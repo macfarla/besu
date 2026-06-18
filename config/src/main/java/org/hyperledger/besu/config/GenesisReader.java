@@ -140,7 +140,7 @@ interface GenesisReader {
     private static class AllocationIterator implements Iterator<GenesisAccount> {
       final JsonParser parser;
 
-      public AllocationIterator(final JsonParser parser) {
+      AllocationIterator(final JsonParser parser) {
         this.parser = parser;
       }
 
@@ -158,6 +158,7 @@ interface GenesisReader {
       }
 
       @Override
+      @SuppressWarnings("StatementSwitchToExpressionSwitch")
       public GenesisAccount next() {
         try {
           final Address address = Address.fromHexString(parser.currentName());
