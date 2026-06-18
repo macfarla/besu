@@ -235,7 +235,11 @@ public class EVM {
     // do not remove assert! A single, monomorphic tracer, is allowed in the EVM execution if
     // tracing is disabled for
     // optimization purposes
-    assert operationTracer.isEnabled() || operationTracer == OperationTracer.NO_TRACING;
+    @SuppressWarnings(
+        "ReferenceEquality") // NO_TRACING is a singleton sentinel; reference equality is
+    // intentional
+    boolean tracerIsNoOp = operationTracer == OperationTracer.NO_TRACING;
+    assert operationTracer.isEnabled() || tracerIsNoOp;
 
     if (evmConfiguration.enableEvmV2()) {
       runToHaltV2(frame, operationTracer);
