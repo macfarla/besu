@@ -70,8 +70,8 @@ public class MigratingMiningCoordinator implements MiningCoordinator, BlockAdded
   private void startActiveMiningCoordinator() {
     activeMiningCoordinator.enable();
     activeMiningCoordinator.start();
-    if (activeMiningCoordinator instanceof BlockAddedObserver) {
-      ((BlockAddedObserver) activeMiningCoordinator).removeObserver();
+    if (activeMiningCoordinator instanceof BlockAddedObserver blockAddedObserver) {
+      blockAddedObserver.removeObserver();
     }
   }
 
@@ -148,15 +148,15 @@ public class MigratingMiningCoordinator implements MiningCoordinator, BlockAdded
           () -> {
             activeMiningCoordinator = nextMiningCoordinator;
             startActiveMiningCoordinator();
-            if (activeMiningCoordinator instanceof BlockAddedObserver) {
-              ((BlockAddedObserver) activeMiningCoordinator).onBlockAdded(event);
+            if (activeMiningCoordinator instanceof BlockAddedObserver blockAddedObserver) {
+              blockAddedObserver.onBlockAdded(event);
             }
           };
 
       CompletableFuture.runAsync(stopActiveCoordinatorTask).thenRun(startNextCoordinatorTask);
 
-    } else if (activeMiningCoordinator instanceof BlockAddedObserver) {
-      ((BlockAddedObserver) activeMiningCoordinator).onBlockAdded(event);
+    } else if (activeMiningCoordinator instanceof BlockAddedObserver blockAddedObserver) {
+      blockAddedObserver.onBlockAdded(event);
     }
   }
 
