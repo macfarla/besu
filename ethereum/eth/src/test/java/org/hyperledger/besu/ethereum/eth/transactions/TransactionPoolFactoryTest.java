@@ -206,16 +206,15 @@ public class TransactionPoolFactoryTest {
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof NewPooledTransactionHashesMessageHandler
-                        && !((NewPooledTransactionHashesMessageHandler) h).isEnabled(),
+                    h instanceof NewPooledTransactionHashesMessageHandler handler
+                        && !handler.isEnabled(),
                 "pooled transaction hashes handler should be disabled"));
 
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof TransactionsMessageHandler
-                        && !((TransactionsMessageHandler) h).isEnabled(),
+                    h instanceof TransactionsMessageHandler handler && !handler.isEnabled(),
                 "transaction messages handler should be disabled"));
   }
 
@@ -232,16 +231,15 @@ public class TransactionPoolFactoryTest {
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof NewPooledTransactionHashesMessageHandler
-                        && ((NewPooledTransactionHashesMessageHandler) h).isEnabled(),
+                    h instanceof NewPooledTransactionHashesMessageHandler handler
+                        && handler.isEnabled(),
                 "pooled transaction hashes handler should be enabled"));
 
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof TransactionsMessageHandler
-                        && ((TransactionsMessageHandler) h).isEnabled(),
+                    h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
                 "transaction messages handler should be enabled"));
   }
 
@@ -257,16 +255,15 @@ public class TransactionPoolFactoryTest {
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof NewPooledTransactionHashesMessageHandler
-                        && ((NewPooledTransactionHashesMessageHandler) h).isEnabled(),
+                    h instanceof NewPooledTransactionHashesMessageHandler handler
+                        && handler.isEnabled(),
                 "pooled transaction hashes handler should be enabled"));
 
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
                 h ->
-                    h instanceof TransactionsMessageHandler
-                        && ((TransactionsMessageHandler) h).isEnabled(),
+                    h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
                 "transaction messages handler should be enabled"));
   }
 
