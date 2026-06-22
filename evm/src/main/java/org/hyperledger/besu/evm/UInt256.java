@@ -710,6 +710,7 @@ public record UInt256(long u3, long u2, long u1, long u0) {
    * @return the result
    */
   // TODO: check perf - wiring shiftRight callers with this one
+  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private UInt256 sar0(final int shift, final long fill) {
     long w3 = u3, w2 = u2, w1 = u1, w0 = u0;
     if (shift == 256) {
@@ -782,6 +783,7 @@ public record UInt256(long u3, long u2, long u1, long u0) {
    * @return the result
    */
   // TODO: check perf - wiring shiftLeft callers with this one
+  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private UInt256 shl0(final int shift) {
     long w3 = u3, w2 = u2, w1 = u1, w0 = u0;
     if (shift == 256) {

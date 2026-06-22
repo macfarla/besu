@@ -158,6 +158,7 @@ interface GenesisReader {
       }
 
       @Override
+      @SuppressWarnings("StatementSwitchToExpressionSwitch")
       public GenesisAccount next() {
         try {
           final Address address = Address.fromHexString(parser.currentName());
