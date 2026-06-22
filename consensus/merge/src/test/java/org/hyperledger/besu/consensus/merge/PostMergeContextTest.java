@@ -334,6 +334,17 @@ public class PostMergeContextTest {
   }
 
   @Test
+  public void isSyncingReturnsFalseWhenP2pDisabledAndFullSyncOnPostMergeNetwork() {
+    // Regression test: when --p2p-enabled=false, the synchronizer is not started so
+    // hasReachedTerminalDifficulty() returns Optional.empty(). With no peers, isInSync() returns
+    // true, so isSyncing() should return false (not syncing).
+    when(mockSyncState.hasReachedTerminalDifficulty()).thenReturn(Optional.empty());
+    when(mockSyncState.isInSync()).thenReturn(Boolean.TRUE);
+
+    assertThat(postMergeContext.isSyncing()).isFalse();
+  }
+
+  @Test
   public void isSyncingReturnsTrueWhenFullSyncingOnPostMergeNetwork() {
     // Regression test for https://github.com/besu-eth/besu/issues/10589
     // On post-merge networks (e.g. Hoodi), reachedTerminalDifficulty is always true.
