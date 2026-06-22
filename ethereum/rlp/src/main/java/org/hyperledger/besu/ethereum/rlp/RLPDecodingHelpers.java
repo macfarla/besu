@@ -97,7 +97,6 @@ class RLPDecodingHelpers {
     }
   }
 
-  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   static RLPElementMetadata rlpElementMetadata(
       final LongUnaryOperator byteGetter, final long size, final long elementStart) {
     final int prefix = Math.toIntExact(byteGetter.applyAsLong(elementStart)) & 0xFF;

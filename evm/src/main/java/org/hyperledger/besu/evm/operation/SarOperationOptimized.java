@@ -93,7 +93,6 @@ public class SarOperationOptimized extends AbstractFixedCostOperation {
    * @param negative whether the input value is negative (sign bit set)
    * @return the shifted 256-bit value
    */
-  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private static Bytes sar256(final byte[] in, final int shift, final boolean negative) {
     if (shift == 0) return Bytes.wrap(in);
     long w0 = getLong(in, 0);

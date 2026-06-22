@@ -88,7 +88,6 @@ public class ShlOperationOptimized extends AbstractFixedCostOperation {
    * @param shift the left shift amount in bits (0–255)
    * @return the shifted 256-bit value
    */
-  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private static Bytes shl256(final byte[] in, final int shift) {
     if (shift == 0) return Bytes.wrap(in);
     long w0 = getLong(in, 0);
