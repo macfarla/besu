@@ -138,7 +138,8 @@ public class PostMergeContext implements MergeContext {
     // Post-TTD or TTD status unknown (e.g. synchronizer not started when --p2p-enabled=false):
     // delegate to isInSync(). For full sync (isInitialSyncPhaseDone=true) with no peers this
     // returns true, so isSyncing() correctly returns false. For snap sync (isInitialSyncPhaseDone
-    // starts false) it returns false until the initial phase completes, so isSyncing() returns true.
+    // starts false) it returns false until the initial phase completes, so isSyncing() returns
+    // true.
     return !state.isInSync();
   }
 
