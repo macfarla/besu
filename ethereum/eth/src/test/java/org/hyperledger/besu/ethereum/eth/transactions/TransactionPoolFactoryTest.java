@@ -213,8 +213,7 @@ public class TransactionPoolFactoryTest {
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
-                h ->
-                    h instanceof TransactionsMessageHandler handler && !handler.isEnabled(),
+                h -> h instanceof TransactionsMessageHandler handler && !handler.isEnabled(),
                 "transaction messages handler should be disabled"));
   }
 
@@ -238,8 +237,7 @@ public class TransactionPoolFactoryTest {
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
-                h ->
-                    h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
+                h -> h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
                 "transaction messages handler should be enabled"));
   }
 
@@ -262,8 +260,7 @@ public class TransactionPoolFactoryTest {
     assertThat(messageHandlers.getAllValues())
         .haveAtLeastOne(
             new Condition<>(
-                h ->
-                    h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
+                h -> h instanceof TransactionsMessageHandler handler && handler.isEnabled(),
                 "transaction messages handler should be enabled"));
   }
 

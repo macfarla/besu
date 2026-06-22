@@ -434,45 +434,48 @@ public abstract class CommandTestAbstract {
 
   private TestBesuCommand getTestBesuCommand(final TestType testType) {
     return switch (testType) {
-      case REQUIRED_OPTION -> new TestBesuCommandWithRequiredOption(
-          () -> rlpBlockImporter,
-          this::jsonBlockImporterFactory,
-          () -> era1BlockImporter,
-          (blockchain) -> rlpBlockExporter,
-          (blockchain, networkName) -> era1BlockExporter,
-          mockRunnerBuilder,
-          mockControllerBuilderFactory,
-          getBesuPluginContext(),
-          environment,
-          storageService,
-          securityModuleService,
-          mockLogger);
-      case PORT_CHECK -> new TestBesuCommand(
-          () -> rlpBlockImporter,
-          this::jsonBlockImporterFactory,
-          () -> era1BlockImporter,
-          (blockchain) -> rlpBlockExporter,
-          (blockchain, networkName) -> era1BlockExporter,
-          mockRunnerBuilder,
-          mockControllerBuilderFactory,
-          getBesuPluginContext(),
-          environment,
-          storageService,
-          securityModuleService,
-          mockLogger);
-      default -> new TestBesuCommandWithoutPortCheck(
-          () -> rlpBlockImporter,
-          this::jsonBlockImporterFactory,
-          () -> era1BlockImporter,
-          (blockchain) -> rlpBlockExporter,
-          (blockchain, networkName) -> era1BlockExporter,
-          mockRunnerBuilder,
-          mockControllerBuilderFactory,
-          getBesuPluginContext(),
-          environment,
-          storageService,
-          securityModuleService,
-          mockLogger);
+      case REQUIRED_OPTION ->
+          new TestBesuCommandWithRequiredOption(
+              () -> rlpBlockImporter,
+              this::jsonBlockImporterFactory,
+              () -> era1BlockImporter,
+              (blockchain) -> rlpBlockExporter,
+              (blockchain, networkName) -> era1BlockExporter,
+              mockRunnerBuilder,
+              mockControllerBuilderFactory,
+              getBesuPluginContext(),
+              environment,
+              storageService,
+              securityModuleService,
+              mockLogger);
+      case PORT_CHECK ->
+          new TestBesuCommand(
+              () -> rlpBlockImporter,
+              this::jsonBlockImporterFactory,
+              () -> era1BlockImporter,
+              (blockchain) -> rlpBlockExporter,
+              (blockchain, networkName) -> era1BlockExporter,
+              mockRunnerBuilder,
+              mockControllerBuilderFactory,
+              getBesuPluginContext(),
+              environment,
+              storageService,
+              securityModuleService,
+              mockLogger);
+      default ->
+          new TestBesuCommandWithoutPortCheck(
+              () -> rlpBlockImporter,
+              this::jsonBlockImporterFactory,
+              () -> era1BlockImporter,
+              (blockchain) -> rlpBlockExporter,
+              (blockchain, networkName) -> era1BlockExporter,
+              mockRunnerBuilder,
+              mockControllerBuilderFactory,
+              getBesuPluginContext(),
+              environment,
+              storageService,
+              securityModuleService,
+              mockLogger);
     };
   }
 
