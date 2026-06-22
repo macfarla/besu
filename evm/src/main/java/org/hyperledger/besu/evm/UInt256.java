@@ -710,7 +710,6 @@ public record UInt256(long u3, long u2, long u1, long u0) {
    * @return the result
    */
   // TODO: check perf - wiring shiftRight callers with this one
-  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private UInt256 sar0(final int shift, final long fill) {
     long w3 = u3, w2 = u2, w1 = u1, w0 = u0;
     if (shift == 256) {
@@ -724,30 +723,30 @@ public record UInt256(long u3, long u2, long u1, long u0) {
       // Remaining intra-word bit shift (shift % 64)
       final int bitShift = shift & 63;
       switch (wordShift) {
-        case 0:
+        case 0 -> {
           w0 = shiftRightWord(w0, w1, bitShift);
           w1 = shiftRightWord(w1, w2, bitShift);
           w2 = shiftRightWord(w2, w3, bitShift);
           w3 = shiftRightWord(w3, fill, bitShift);
-          break;
-        case 1:
+        }
+        case 1 -> {
           w0 = shiftRightWord(w1, w2, bitShift);
           w1 = shiftRightWord(w2, w3, bitShift);
           w2 = shiftRightWord(w3, fill, bitShift);
           w3 = fill;
-          break;
-        case 2:
+        }
+        case 2 -> {
           w0 = shiftRightWord(w2, w3, bitShift);
           w1 = shiftRightWord(w3, fill, bitShift);
           w2 = fill;
           w3 = fill;
-          break;
-        case 3:
+        }
+        case 3 -> {
           w0 = shiftRightWord(w3, fill, bitShift);
           w1 = fill;
           w2 = fill;
           w3 = fill;
-          break;
+        }
       }
     }
     return new UInt256(w3, w2, w1, w0);
@@ -783,7 +782,6 @@ public record UInt256(long u3, long u2, long u1, long u0) {
    * @return the result
    */
   // TODO: check perf - wiring shiftLeft callers with this one
-  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   private UInt256 shl0(final int shift) {
     long w3 = u3, w2 = u2, w1 = u1, w0 = u0;
     if (shift == 256) {
@@ -797,30 +795,30 @@ public record UInt256(long u3, long u2, long u1, long u0) {
       // Remaining intra-word bit shift (shift % 64)
       final int bitShift = shift & 63;
       switch (wordShift) {
-        case 0:
+        case 0 -> {
           w3 = shiftLeftWord(w3, w2, bitShift);
           w2 = shiftLeftWord(w2, w1, bitShift);
           w1 = shiftLeftWord(w1, w0, bitShift);
           w0 = shiftLeftWord(w0, 0, bitShift);
-          break;
-        case 1:
+        }
+        case 1 -> {
           w3 = shiftLeftWord(w2, w1, bitShift);
           w2 = shiftLeftWord(w1, w0, bitShift);
           w1 = shiftLeftWord(w0, 0, bitShift);
           w0 = 0;
-          break;
-        case 2:
+        }
+        case 2 -> {
           w3 = shiftLeftWord(w1, w0, bitShift);
           w2 = shiftLeftWord(w0, 0, bitShift);
           w1 = 0;
           w0 = 0;
-          break;
-        case 3:
+        }
+        case 3 -> {
           w3 = shiftLeftWord(w0, 0, bitShift);
           w2 = 0;
           w1 = 0;
           w0 = 0;
-          break;
+        }
       }
     }
     return new UInt256(w3, w2, w1, w0);
