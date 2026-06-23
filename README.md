@@ -77,6 +77,6 @@ Besu includes support for running Ethereum reference tests and generating detail
 To learn how to run the tests and enable opcode-level JSON tracing for debugging and correctness verification, see the [Reference Test Execution and Tracing Guide](REFERENCE_TESTS.md).
 
 [Besu Issues]: https://github.com/besu-eth/besu/issues
-[Besu User Documentation]: https://besu.hyperledger.org
+[Besu User Documentation]: https://docs.besu-eth.org
 [Besu channel on Discord]: https://discord.com/invite/hyperledger
 [Contributing Guidelines]: CONTRIBUTING.md
