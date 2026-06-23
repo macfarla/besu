@@ -3,7 +3,7 @@
 
 Welcome to the Besu repository! The following links are a set of guidelines for contributing to this repo and its packages. These are mostly guidelines, not rules. Use your best judgement, and feel free to propose changes to this document in a pull request. Contributions come in the form of code submissions, writing documentation, raising issues, helping others in chat, and any other actions that help develop Besu.
 
-### Github/Discord Accounts
+### GitHub/Discord Accounts
 
 Having the following accounts is necessary for contributing code/issues to Besu.  
 * If you want to contribute code, you can make a [github account here](https://github.com).  

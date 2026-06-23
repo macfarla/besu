@@ -29,7 +29,7 @@ If you have any questions, queries or comments, [Besu channel on Discord] is the
 
 ## Besu Users
 
-To install the Besu binary, follow [these instructions](https://besu.hyperledger.org/public-networks/get-started/install/binary-distribution).    
+To install the Besu binary, follow [these instructions](https://docs.besu-eth.org/public-networks/get-started/install/binary-distribution).    
 
 ## Besu Developers
 
@@ -46,7 +46,7 @@ Instructions for how to get started with developing on the Besu codebase. Please
 
 * [Checking Out and Building](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154264/Building+from+source)
 * [Code Coverage](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154288/Code+coverage)
-* [Logging](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154291/Logging) or the [Documentation's Logging section](https://besu.hyperledger.org/public-networks/how-to/monitor/logging)
+* [Logging](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154291/Logging) or the [Documentation's Logging section](https://docs.besu-eth.org/public-networks/how-to/monitor/logging)
 
 #### Dependency Verification
 
