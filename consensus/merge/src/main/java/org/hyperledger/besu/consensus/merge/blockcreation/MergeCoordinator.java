@@ -695,11 +695,16 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
     validationResult
         .getYield()
         .ifPresentOrElse(
-            result ->
-                chain.storeBlock(
-                    block,
-                    result.getReceipts(),
-                    validationResult.getYield().flatMap(y -> y.getBlockAccessList())),
+            result -> {
+              chain.storeBlock(
+                  block,
+                  result.getReceipts(),
+                  validationResult.getYield().flatMap(y -> y.getBlockAccessList()));
+              // Persist the world state for this block so that subsequent newPayload calls with
+              // this block as parent can satisfy isWorldStateImmediatelyCached without trie-log
+              // replay. This allows sequential newPayload calls without an intervening FCU.
+              protocolContext.getWorldStateArchive().persistWorldStateForBlock(block.getHeader());
+            },
             () -> LOG.debug("empty yield in blockProcessingResult"));
     return validationResult;
   }
