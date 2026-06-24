@@ -159,9 +159,9 @@ public abstract class PathBasedWorldStateProvider implements WorldStateArchive {
       }
     } catch (Exception e) {
       LOG.atDebug()
-          .setMessage("Exception persisting world state for block {}: {}")
+          .setMessage("Exception persisting world state for block {}")
           .addArgument(blockHeader::toLogString)
-          .addArgument(e::getMessage)
+          .setCause(e)
           .log();
     }
   }

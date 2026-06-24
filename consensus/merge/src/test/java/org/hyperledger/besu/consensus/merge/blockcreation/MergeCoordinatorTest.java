@@ -60,6 +60,7 @@ import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.core.ImmutableMiningConfiguration;
 import org.hyperledger.besu.ethereum.core.ImmutableMiningConfiguration.MutableInitValues;
 import org.hyperledger.besu.ethereum.core.ImmutableMiningConfiguration.Unstable;
+import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.core.TransactionTestFixture;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
@@ -1262,6 +1263,49 @@ public class MergeCoordinatorTest implements MergeGenesisConfigHelper {
 
     verify(blockchain, never()).setFinalized(block1Header.getHash());
     verify(blockchain, never()).setSafeBlock(block1Header.getHash());
+  }
+
+  @Test
+  public void rememberBlockPopulatesBonsaiCacheSoSubsequentPayloadDoesNotReturnSyncing() {
+    // Use a real Bonsai world state archive so isWorldStateImmediatelyCached exercises the
+    // PathBasedWorldStateProvider implementation rather than the Forest no-op default.
+    final MutableBlockchain bonsaiBlockchain =
+        spy(createInMemoryBlockchain(genesisState.getBlock()));
+    final var bonsaiArchive =
+        InMemoryKeyValueStorageProvider.createBonsaiInMemoryWorldStateArchive(bonsaiBlockchain);
+    final var bonsaiMutable = bonsaiArchive.getWorldState();
+    genesisState.writeStateTo(bonsaiMutable);
+    bonsaiMutable.persist(genesisState.getBlock().getHeader());
+
+    final ProtocolContext bonsaiContext =
+        new ProtocolContext.Builder()
+            .withBlockchain(bonsaiBlockchain)
+            .withWorldStateArchive(bonsaiArchive)
+            .withConsensusContext(mergeContext)
+            .withBadBlockManager(badBlockManager)
+            .build();
+
+    final MergeCoordinator bonsaiCoordinator =
+        new MergeCoordinator(
+            bonsaiContext,
+            protocolSchedule,
+            ethScheduler,
+            transactionPool,
+            miningConfiguration,
+            backwardSyncContext);
+
+    final BlockHeader genesisHeader = genesisState.getBlock().getHeader();
+    final BlockHeader block1Header = nextBlockHeader(genesisHeader);
+    final Block block1 = new Block(block1Header, BlockBody.empty());
+
+    // Before rememberBlock, the parent (genesis) is cached but block1 is not.
+    assertThat(bonsaiArchive.isWorldStateImmediatelyCached(block1Header.getHash())).isFalse();
+
+    assertThat(bonsaiCoordinator.rememberBlock(block1).getYield()).isPresent();
+
+    // After rememberBlock, block1's world state must be immediately cached so that a
+    // subsequent newPayload using block1 as parent does not incorrectly return SYNCING.
+    assertThat(bonsaiArchive.isWorldStateImmediatelyCached(block1Header.getHash())).isTrue();
   }
 
   private static BlockHeader mockBlockHeader() {
