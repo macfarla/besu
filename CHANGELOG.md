@@ -20,7 +20,7 @@
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
 
 ### Bug fixes
-- Fix `engine_newPayload` spuriously returning `SYNCING` for sequential payloads when backward sync is concurrently active [#10600](https://github.com/besu-eth/besu/pull/10600)
+- Fix `engine_newPayload` spuriously returning `SYNCING` for sequential payloads when backward sync is concurrently active [#10690](https://github.com/besu-eth/besu/pull/10690)
 - Fix `eth_getBlockByNumber("safe"/"finalized")` returning `Unknown block` on nodes with a complete chain but no peers. The FCU handler now only returns `SYNCING` when the head block is genuinely not found. [#10658](https://github.com/besu-eth/besu/issues/10658)
 - `--api-gas-price-blocks` fixed to treat `0` as "sample zero blocks" [#10642](https://github.com/besu-eth/besu/pull/10642)
 
