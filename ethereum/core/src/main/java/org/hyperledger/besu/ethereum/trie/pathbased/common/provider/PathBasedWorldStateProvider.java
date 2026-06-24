@@ -143,20 +143,20 @@ public abstract class PathBasedWorldStateProvider implements WorldStateArchive {
     if (worldStateCacheManager.contains(blockHeader.getBlockHash())) {
       return;
     }
-    try {
-      // Roll headWorldState to this block (1 trie-log forward replay from the previous head).
-      // This ensures that the next isWorldStateImmediatelyCached check for this block returns
-      // true, allowing sequential newPayload calls without an intervening FCU.
-      rollFullWorldStateToBlockHash(headWorldState, blockHeader.getBlockHash())
-          .ifPresentOrElse(
-              ws ->
-                  worldStateCacheManager.addCachedLayer(
-                      blockHeader, headWorldState.getWorldStateRootHash(), headWorldState),
-              () ->
-                  LOG.atDebug()
-                      .setMessage("Could not persist world state for block {}")
-                      .addArgument(blockHeader::toLogString)
-                      .log());
+    // Use a non-head world state from the cache so we do NOT mutate headWorldState.
+    // headWorldState may be concurrently modified by backward sync on EthScheduler threads;
+    // rolling it here from the vert.x thread would race with those mutations.
+    try (final var worldState =
+        (PathBasedWorldState) getFullWorldStateFromCache(blockHeader).orElse(null)) {
+      if (worldState != null) {
+        worldStateCacheManager.addCachedLayer(
+            blockHeader, worldState.getWorldStateRootHash(), worldState);
+      } else {
+        LOG.atDebug()
+            .setMessage("Could not persist world state for block {}")
+            .addArgument(blockHeader::toLogString)
+            .log();
+      }
     } catch (Exception e) {
       LOG.atDebug()
           .setMessage("Exception persisting world state for block {}: {}")
