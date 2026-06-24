@@ -50,9 +50,9 @@ public interface WorldStateArchive extends Closeable {
   /**
    * Caches a snapshot of the world state for the given block so that subsequent calls to {@link
    * #isWorldStateImmediatelyCached(Hash)} return true for that block. This should be called after a
-   * block is successfully validated and stored (e.g. in rememberBlock) so that sequential newPayload
-   * calls without an intervening FCU can find the parent world state without trie-log replay. Does
-   * not modify the world state head. For non-Bonsai archives this is a no-op.
+   * block is successfully validated and stored (e.g. in rememberBlock) so that sequential
+   * newPayload calls without an intervening FCU can find the parent world state without trie-log
+   * replay. Does not modify the world state head. For non-Bonsai archives this is a no-op.
    *
    * @param blockHeader the block whose world state should be cached
    */
