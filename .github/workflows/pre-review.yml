@@ -26,9 +26,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: Check for binary files
         run: |
-          if git ls-files | grep -qE '\.(exe|dll)$'; then
+          if git ls-files | grep -iqE '\.(exe|dll)$'; then
             echo "Binary files found:"
-            git ls-files | grep -E '\.(exe|dll)$'
+            git ls-files | grep -iE '\.(exe|dll)$'
             exit 1
           fi
   gradle-wrapper:
