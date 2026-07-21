@@ -39,6 +39,7 @@ import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.util.HexUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -218,22 +219,25 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
       return;
     }
 
-    // Stream the array — write each blob entry as it is serialised, flushing after each
+    // Option A: pre-build all entries in parallel (hex encoding dominates; matches syncResponse)
+    final List<BlobAndProofV2> builtBundles =
+        validBundles.parallelStream().map(this::createBlobAndProofV2).toList();
+
+    // Option B: include `[` in the header write; trail with `]}` as one write; coalesce
+    // comma+blob into a single write to minimize event-loop dispatches
     out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())
-                + ",\"result\":")
+                + ",\"result\":[")
             .getBytes(StandardCharsets.UTF_8));
-    out.write('[');
-    boolean first = true;
-    for (final BlobProofBundle bundle : validBundles) {
-      if (!first) out.write(',');
-      out.write(mapper.writeValueAsBytes(createBlobAndProofV2(bundle)));
-      out.flush();
-      first = false;
+    final ByteArrayOutputStream blobBuf = new ByteArrayOutputStream(200 * 1024);
+    for (int i = 0; i < builtBundles.size(); i++) {
+      blobBuf.reset();
+      if (i > 0) blobBuf.write(',');
+      mapper.writeValue(blobBuf, builtBundles.get(i));
+      blobBuf.writeTo(out);
     }
-    out.write(']');
-    out.write('}');
+    out.write("]}".getBytes(StandardCharsets.UTF_8));
     hitCounter.inc();
   }
 
