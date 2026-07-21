@@ -39,11 +39,13 @@ import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.util.HexUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -191,29 +193,30 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
 
     requestedCounter.inc(versionedHashes.length);
 
-    // Stream the array — V3 writes null inline for missing/unsupported blobs (partial responses)
+    // Option A: pre-build all entries before writing — separates hex encoding from I/O
+    final List<BlobAndProofV2> results = getBlobV3Result(versionedHashes);
+    final long availableCount = results.stream().filter(Objects::nonNull).count();
+
+    // Option B: include `[` in the header write; trail with `]}` as one write; coalesce
+    // comma+entry into a single write to minimize event-loop dispatches
     out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())
-                + ",\"result\":")
+                + ",\"result\":[")
             .getBytes(StandardCharsets.UTF_8));
-    out.write('[');
-    long availableCount = 0;
-    boolean first = true;
-    for (final VersionedHash hash : versionedHashes) {
-      if (!first) out.write(',');
-      final BlobAndProofV2 entry = getBlobAndProofV2(transactionPool.getBlobProofBundle(hash));
+    final ByteArrayOutputStream entryBuf = new ByteArrayOutputStream(200 * 1024);
+    for (int i = 0; i < results.size(); i++) {
+      entryBuf.reset();
+      if (i > 0) entryBuf.write(',');
+      final BlobAndProofV2 entry = results.get(i);
       if (entry == null) {
-        out.write("null".getBytes(StandardCharsets.UTF_8));
+        entryBuf.write("null".getBytes(StandardCharsets.UTF_8));
       } else {
-        out.write(mapper.writeValueAsBytes(entry));
-        availableCount++;
+        mapper.writeValue(entryBuf, entry);
       }
-      out.flush();
-      first = false;
+      entryBuf.writeTo(out);
     }
-    out.write(']');
-    out.write('}');
+    out.write("]}".getBytes(StandardCharsets.UTF_8));
 
     availableCounter.inc(availableCount);
     if (availableCount == versionedHashes.length) {
