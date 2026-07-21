@@ -149,7 +149,7 @@ dependencies {
 
     api 'org.hibernate.validator:hibernate-validator:8.0.2.Final'
 
-    api 'org.hyperledger.besu:besu-native-common:1.5.0'
+    api 'org.hyperledger.besu:besu-native-common:2.0.0'
     api 'org.hyperledger.besu:arithmetic:1.5.0'
     api 'org.hyperledger.besu:blake2bf:1.5.0'
     api 'org.hyperledger.besu:gnark:1.5.0'
