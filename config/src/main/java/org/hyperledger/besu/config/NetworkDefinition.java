@@ -90,7 +90,12 @@ public enum NetworkDefinition {
       2018, // network id
       false, // can snap sync
       false, // native required
-      60_000_000L), // target gas limit
+      60_000_000L, // target gas limit
+      "2026-12-31",
+      "Dev network (--network=dev) is deprecated and will be removed in a future release.\n"
+          + "PoW mining infrastructure has been removed and this network can no longer produce blocks.\n"
+          + "For local development, use Ephemery (--network=ephemery) with a consensus layer client,\n"
+          + "or use Kurtosis (https://github.com/ethpandaops/ethereum-package) to run a local devnet."),
   /** Future EIPs network name. */
   FUTURE_EIPS(
       "/future.json",
@@ -113,6 +118,7 @@ public enum NetworkDefinition {
   private final long networkId;
   private final boolean canSnapSync;
   private final String deprecationDate;
+  private final String deprecationMessage;
   private final boolean nativeRequired;
   private final long targetGasLimit;
 
@@ -123,7 +129,7 @@ public enum NetworkDefinition {
       final boolean canSnapSync,
       final boolean nativeRequired,
       final long targetGasLimit) {
-    this(genesisFile, chainId, networkId, canSnapSync, nativeRequired, targetGasLimit, null);
+    this(genesisFile, chainId, networkId, canSnapSync, nativeRequired, targetGasLimit, null, null);
   }
 
   NetworkDefinition(
@@ -133,7 +139,8 @@ public enum NetworkDefinition {
       final boolean canSnapSync,
       final boolean nativeRequired,
       final long targetGasLimit,
-      final String deprecationDate) {
+      final String deprecationDate,
+      final String deprecationMessage) {
     this.genesisFile = genesisFile;
     this.chainId = chainId;
     this.networkId = networkId;
@@ -141,6 +148,7 @@ public enum NetworkDefinition {
     this.nativeRequired = nativeRequired;
     this.targetGasLimit = targetGasLimit;
     this.deprecationDate = deprecationDate;
+    this.deprecationMessage = deprecationMessage;
   }
 
   /**
@@ -205,6 +213,15 @@ public enum NetworkDefinition {
    */
   public Optional<String> getDeprecationDate() {
     return Optional.ofNullable(deprecationDate);
+  }
+
+  /**
+   * Gets custom deprecation message, if set.
+   *
+   * @return the deprecation message
+   */
+  public Optional<String> getDeprecationMessage() {
+    return Optional.ofNullable(deprecationMessage);
   }
 
   /**
