@@ -46,7 +46,7 @@ DOCKER_FILE="${2:-$PWD/Dockerfile}"
 # Write dev.json genesis to a temp file for use in docker tests.
 # --network=dev is deprecated; pass the genesis directly via --genesis-file instead.
 GENESIS_FILE=$(mktemp /tmp/besu-dev-genesis-XXXXXX.json)
-trap 'rm -f "$GENESIS_FILE"' EXIT
+trap 'rm -f "$GENESIS_FILE" 2>/dev/null || true' EXIT
 cat > "$GENESIS_FILE" <<'GENESIS'
 {
   "config": {
