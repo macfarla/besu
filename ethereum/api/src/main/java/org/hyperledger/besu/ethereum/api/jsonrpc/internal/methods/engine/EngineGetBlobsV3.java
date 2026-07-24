@@ -193,12 +193,10 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
 
     requestedCounter.inc(versionedHashes.length);
 
-    // Option A: pre-build all entries before writing — separates hex encoding from I/O
+    // pre-build all entries before writing — separates hex encoding from I/O
     final List<BlobAndProofV2> results = getBlobV3Result(versionedHashes);
     final long availableCount = results.stream().filter(Objects::nonNull).count();
 
-    // Option B: include `[` in the header write; trail with `]}` as one write; coalesce
-    // comma+entry into a single write to minimize event-loop dispatches
     out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())

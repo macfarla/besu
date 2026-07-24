@@ -219,12 +219,10 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
       return;
     }
 
-    // Option A: pre-build all entries in parallel (hex encoding dominates; matches syncResponse)
+    // pre-build all entries in parallel (hex encoding dominates; matches syncResponse)
     final List<BlobAndProofV2> builtBundles =
         validBundles.parallelStream().map(this::createBlobAndProofV2).toList();
 
-    // Option B: include `[` in the header write; trail with `]}` as one write; coalesce
-    // comma+blob into a single write to minimize event-loop dispatches
     out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())
