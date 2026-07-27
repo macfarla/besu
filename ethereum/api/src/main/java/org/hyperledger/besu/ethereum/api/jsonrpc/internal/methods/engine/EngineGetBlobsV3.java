@@ -123,14 +123,14 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
 
   @Override
   public JsonRpcResponse syncResponse(final JsonRpcRequestContext requestContext) {
+    if (mergeContext.get().isSyncing()) {
+      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), null);
+    }
     final VersionedHash[] versionedHashes = extractVersionedHashes(requestContext);
     if (versionedHashes.length > REQUEST_MAX_VERSIONED_HASHES) {
       return new JsonRpcErrorResponse(
           requestContext.getRequest().getId(),
           RpcErrorType.INVALID_ENGINE_GET_BLOBS_TOO_LARGE_REQUEST);
-    }
-    if (mergeContext.get().isSyncing()) {
-      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), null);
     }
     long timestamp = protocolContext.getBlockchain().getChainHeadHeader().getTimestamp();
     ValidationResult<RpcErrorType> forkValidationResult = validateForkSupported(timestamp);
@@ -166,6 +166,14 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
   public void streamResponse(
       final JsonRpcRequestContext requestContext, final OutputStream out, final ObjectMapper mapper)
       throws IOException {
+    if (mergeContext.get().isSyncing()) {
+      out.write(
+          ("{\"jsonrpc\":\"2.0\",\"id\":"
+                  + mapper.writeValueAsString(requestContext.getRequest().getId())
+                  + ",\"result\":null}")
+              .getBytes(StandardCharsets.UTF_8));
+      return;
+    }
     final VersionedHash[] versionedHashes = extractVersionedHashes(requestContext);
     if (versionedHashes.length > REQUEST_MAX_VERSIONED_HASHES) {
       mapper.writeValue(
@@ -173,14 +181,6 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
           new JsonRpcErrorResponse(
               requestContext.getRequest().getId(),
               RpcErrorType.INVALID_ENGINE_GET_BLOBS_TOO_LARGE_REQUEST));
-      return;
-    }
-    if (mergeContext.get().isSyncing()) {
-      out.write(
-          ("{\"jsonrpc\":\"2.0\",\"id\":"
-                  + mapper.writeValueAsString(requestContext.getRequest().getId())
-                  + ",\"result\":null}")
-              .getBytes(StandardCharsets.UTF_8));
       return;
     }
     final long timestamp = protocolContext.getBlockchain().getChainHeadHeader().getTimestamp();

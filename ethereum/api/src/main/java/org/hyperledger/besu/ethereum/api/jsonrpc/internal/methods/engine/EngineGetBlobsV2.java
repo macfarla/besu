@@ -27,7 +27,6 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.StreamingJsonR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.BlobAndProofV2;
 import org.hyperledger.besu.ethereum.core.kzg.BlobProofBundle;
@@ -104,65 +103,22 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
 
   @Override
   public JsonRpcResponse syncResponse(final JsonRpcRequestContext requestContext) {
-    final VersionedHash[] versionedHashes = extractVersionedHashes(requestContext);
-    if (versionedHashes.length > REQUEST_MAX_VERSIONED_HASHES) {
-      return new JsonRpcErrorResponse(
-          requestContext.getRequest().getId(),
-          RpcErrorType.INVALID_ENGINE_GET_BLOBS_TOO_LARGE_REQUEST);
-    }
-    if (mergeContext.get().isSyncing()) {
-      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), null);
-    }
-    long timestamp = protocolContext.getBlockchain().getChainHeadHeader().getTimestamp();
-    ValidationResult<RpcErrorType> forkValidationResult = validateForkSupported(timestamp);
-    if (!forkValidationResult.isValid()) {
-      return new JsonRpcErrorResponse(requestContext.getRequest().getId(), forkValidationResult);
-    }
-    requestedCounter.inc(versionedHashes.length);
-    List<BlobProofBundle> validBundles = new ArrayList<>(versionedHashes.length);
-    int missingBlobs = 0;
-    int unsupportedBlobs = 0;
-    for (VersionedHash hash : versionedHashes) {
-      final BlobProofBundle bundle = transactionPool.getBlobProofBundle(hash);
-      if (bundle == null) {
-        LOG.trace("No BlobProofBundle found for versioned hash: {}", hash);
-        missingBlobs++;
-        continue;
-      }
-      if (bundle.getBlobType() == BlobType.KZG_PROOF) {
-        LOG.trace("Unsupported blob type KZG_PROOF for versioned hash: {}", hash);
-        unsupportedBlobs++;
-        continue;
-      }
-      validBundles.add(bundle);
-    }
-    // count how many of the requested blobs are actually available
-    availableCounter.inc(validBundles.size());
-
-    LOG.debug(
-        "Requested {} bundles, found {} valid bundles, {} missing, {} unsupported",
-        versionedHashes.length,
-        validBundles.size(),
-        missingBlobs,
-        unsupportedBlobs);
-
-    // V2 returns null if any requested blobs are missing or unsupported
-    if (missingBlobs > 0 || unsupportedBlobs > 0) {
-      missCounter.inc();
-      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), null);
-    }
-
-    final List<BlobAndProofV2> results =
-        validBundles.parallelStream().map(this::createBlobAndProofV2).toList();
-
-    hitCounter.inc();
-    return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), results);
+    // Streaming-only method: single requests are routed to streamResponse() by the executor.
+    // This path is only reachable if the method is included in a JSON-RPC batch request,
+    // which cannot support streaming — returning INVALID_REQUEST mirrors the default behaviour
+    // of StreamingJsonRpcMethod.response() for non-engine streaming methods.
+    return new JsonRpcErrorResponse(
+        requestContext.getRequest().getId(), RpcErrorType.INVALID_REQUEST);
   }
 
   @Override
   public void streamResponse(
       final JsonRpcRequestContext requestContext, final OutputStream out, final ObjectMapper mapper)
       throws IOException {
+    if (mergeContext.get().isSyncing()) {
+      writeNullResult(requestContext.getRequest().getId(), out, mapper);
+      return;
+    }
     final VersionedHash[] versionedHashes = extractVersionedHashes(requestContext);
     if (versionedHashes.length > REQUEST_MAX_VERSIONED_HASHES) {
       mapper.writeValue(
@@ -170,10 +126,6 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
           new JsonRpcErrorResponse(
               requestContext.getRequest().getId(),
               RpcErrorType.INVALID_ENGINE_GET_BLOBS_TOO_LARGE_REQUEST));
-      return;
-    }
-    if (mergeContext.get().isSyncing()) {
-      writeNullResult(requestContext.getRequest().getId(), out, mapper);
       return;
     }
     final long timestamp = protocolContext.getBlockchain().getChainHeadHeader().getTimestamp();
