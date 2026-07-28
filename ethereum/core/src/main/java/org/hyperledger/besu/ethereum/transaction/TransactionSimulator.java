@@ -377,7 +377,9 @@ public class TransactionSimulator {
         (protocolSpec, maybeParentHeader) -> {
           if (transactionValidationParams.isAllowExceedingBalance()
               && !transactionValidationParams.isPreserveCallerGasPricing()) {
-            return Wei.ZERO;
+            // EIP-4844 MIN_BLOB_GASPRICE = 1; returning zero is spec-illegal even in no-fee
+            // simulation paths where baseFee is zeroed for caller convenience.
+            return Wei.ONE;
           }
           return protocolSpec
               .getFeeMarket()
