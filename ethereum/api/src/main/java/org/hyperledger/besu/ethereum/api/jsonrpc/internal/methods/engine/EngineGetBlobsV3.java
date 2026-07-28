@@ -27,7 +27,6 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.StreamingJsonR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.BlobAndProofV2;
 import org.hyperledger.besu.ethereum.core.kzg.BlobProofBundle;
@@ -123,43 +122,13 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
 
   @Override
   public JsonRpcResponse syncResponse(final JsonRpcRequestContext requestContext) {
-    if (mergeContext.get().isSyncing()) {
-      return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), null);
-    }
-    final VersionedHash[] versionedHashes = extractVersionedHashes(requestContext);
-    if (versionedHashes.length > REQUEST_MAX_VERSIONED_HASHES) {
-      return new JsonRpcErrorResponse(
-          requestContext.getRequest().getId(),
-          RpcErrorType.INVALID_ENGINE_GET_BLOBS_TOO_LARGE_REQUEST);
-    }
-    long timestamp = protocolContext.getBlockchain().getChainHeadHeader().getTimestamp();
-    ValidationResult<RpcErrorType> forkValidationResult = validateForkSupported(timestamp);
-    if (!forkValidationResult.isValid()) {
-      return new JsonRpcErrorResponse(requestContext.getRequest().getId(), forkValidationResult);
-    }
 
-    requestedCounter.inc(versionedHashes.length);
-
-    final List<BlobAndProofV2> result = getBlobV3Result(versionedHashes);
-
-    // count available blobs (non-null entries)
-    long availableCount = result.stream().mapToLong(blob -> blob != null ? 1 : 0).sum();
-    availableCounter.inc(availableCount);
-
-    // track if this was a partial or full response
-    if (availableCount == versionedHashes.length) {
-      fullResponseCounter.inc();
-    } else {
-      partialResponseCounter.inc();
-    }
-
-    LOG.debug(
-        "Requested {} bundles, found {} valid bundles ({} partial response)",
-        versionedHashes.length,
-        availableCount,
-        availableCount < versionedHashes.length);
-
-    return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), result);
+    // Streaming-only method: single requests are routed to streamResponse() by the executor.
+    // This path is only reachable if the method is included in a JSON-RPC batch request,
+    // which cannot support streaming — returning INVALID_REQUEST mirrors the default behaviour
+    // of StreamingJsonRpcMethod.response() for non-engine streaming methods.
+    return new JsonRpcErrorResponse(
+        requestContext.getRequest().getId(), RpcErrorType.INVALID_REQUEST);
   }
 
   @Override
