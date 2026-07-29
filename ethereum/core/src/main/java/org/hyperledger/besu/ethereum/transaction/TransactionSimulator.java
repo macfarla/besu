@@ -609,7 +609,9 @@ public class TransactionSimulator {
       gasPrice = Wei.ZERO;
       maxFeePerGas = Wei.ZERO;
       maxPriorityFeePerGas = Wei.ZERO;
-      maxFeePerBlobGas = Wei.ZERO;
+      // Must match blobGasPrice (Wei.ONE) so the fee-cap check passes; see
+      // blobGasPricePerGasSupplier above.
+      maxFeePerBlobGas = Wei.ONE;
     } else {
       if (noPricingParametersPresent) {
         // in case there are no gas price parameters,
