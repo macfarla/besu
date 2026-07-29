@@ -171,9 +171,12 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
       return;
     }
 
-    // pre-build all entries in parallel (hex encoding dominates; matches syncResponse)
+    // pre-build all entries; parallelise only when multiple blobs (128KB each) offset ForkJoin
+    // overhead
     final List<BlobAndProofV2> builtBundles =
-        validBundles.parallelStream().map(this::createBlobAndProofV2).toList();
+        validBundles.size() > 2
+            ? validBundles.parallelStream().map(this::createBlobAndProofV2).toList()
+            : validBundles.stream().map(this::createBlobAndProofV2).toList();
 
     out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
@@ -212,7 +215,7 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
   private BlobAndProofV2 createBlobAndProofV2(final BlobProofBundle blobProofBundle) {
     return new BlobAndProofV2(
         HexUtils.toFastHex(blobProofBundle.getBlob().getData(), true),
-        blobProofBundle.getKzgProof().parallelStream()
+        blobProofBundle.getKzgProof().stream()
             .map(proof -> HexUtils.toFastHex(proof.getData(), true))
             .toList());
   }

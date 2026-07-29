@@ -162,7 +162,7 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
 
     requestedCounter.inc(versionedHashes.length);
 
-    // pre-build all entries before writing — separates hex encoding from I/O
+    // pre-build all entries; parallelise encoding when multiple blobs offset ForkJoin overhead
     final List<BlobAndProofV2> results = getBlobV3Result(versionedHashes);
     final long availableCount = results.stream().filter(Objects::nonNull).count();
 
@@ -211,10 +211,16 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
   }
 
   private @NotNull List<BlobAndProofV2> getBlobV3Result(final VersionedHash[] versionedHashes) {
-    return Arrays.stream(versionedHashes)
-        .map(transactionPool::getBlobProofBundle)
-        .map(this::getBlobAndProofV2)
-        .toList();
+    // Blob pool lookups are sequential (single lock); encoding is parallelised when > 2 blobs
+    // because each 128 KB blob takes ~260 µs to hex-encode and offsets ForkJoin overhead.
+    final BlobProofBundle[] bundles = new BlobProofBundle[versionedHashes.length];
+    for (int i = 0; i < versionedHashes.length; i++) {
+      bundles[i] = transactionPool.getBlobProofBundle(versionedHashes[i]);
+    }
+    if (versionedHashes.length > 2) {
+      return Arrays.stream(bundles).parallel().map(this::getBlobAndProofV2).toList();
+    }
+    return Arrays.stream(bundles).map(this::getBlobAndProofV2).toList();
   }
 
   private @Nullable BlobAndProofV2 getBlobAndProofV2(final BlobProofBundle bundle) {
@@ -233,7 +239,7 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
   private BlobAndProofV2 createBlobAndProofV2(final BlobProofBundle blobProofBundle) {
     return new BlobAndProofV2(
         HexUtils.toFastHex(blobProofBundle.getBlob().getData(), true),
-        blobProofBundle.getKzgProof().parallelStream()
+        blobProofBundle.getKzgProof().stream()
             .map(proof -> HexUtils.toFastHex(proof.getData(), true))
             .toList());
   }
