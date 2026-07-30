@@ -826,15 +826,27 @@ public class RunnerBuilder {
     networkRunner.getRlpxAgent().ifPresent(ethPeers::setRlpxAgent);
 
     final P2PNetwork network = networkRunner.getNetwork();
-    // ForkId in Ethereum Node Record needs updating when we transition to a new
-    // protocol spec
+    // ForkId in Ethereum Node Record needs updating when we transition to a new protocol spec.
+    // Using isOnMilestoneBoundary (exact equality) is not sufficient for timestamp-scheduled
+    // forks: if no block lands exactly on the fork timestamp (e.g. due to missed slots) the
+    // ENR would never be updated. Instead, compare the resolved spec for the new block against
+    // its parent — a change indicates we just crossed a fork boundary regardless of whether
+    // the exact timestamp was hit.
     context
         .getBlockchain()
         .observeBlockAdded(
             blockAddedEvent -> {
-              if (protocolSchedule.isOnMilestoneBoundary(blockAddedEvent.getHeader())) {
-                network.updateNodeRecord();
-              }
+              final var header = blockAddedEvent.getHeader();
+              context
+                  .getBlockchain()
+                  .getBlockHeader(header.getParentHash())
+                  .ifPresent(
+                      parentHeader -> {
+                        if (protocolSchedule.getByBlockHeader(header)
+                            != protocolSchedule.getByBlockHeader(parentHeader)) {
+                          network.updateNodeRecord();
+                        }
+                      });
             });
     nodePermissioningController.ifPresent(
         n ->

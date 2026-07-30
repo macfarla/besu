@@ -138,7 +138,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
 
   @Override
   public boolean isEthHash() {
-    return configRoot.has(ETHASH_CONFIG_KEY) || configRoot.has(FIXED_DIFFICULTY_CONFIG_KEY);
+    // retaining this method for backwards compatibility but
+    return false;
   }
 
   @Override
