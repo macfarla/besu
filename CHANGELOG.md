@@ -32,7 +32,7 @@
 - Fix `ibft_*` and `qbft_*` JSON-RPC methods returning `Method not enabled` on IBFT2->QBFT migration networks (genesis containing both `ibft2` and `qbft` sections). [#10679](https://github.com/besu-eth/besu/issues/10679)
 - Fix `admin_nodeInfo` reporting wrong RLPx/discovery ephemeral ports under `--nat-method=DOCKER`, due to a swapped NAT port mapping and a stale pre-bind snapshot. [#10860](https://github.com/besu-eth/besu/pull/10860)
 - Recover from restart during flatDB heal sync step [#10883](https://github.com/besu-eth/besu/pull/10883)
-- Fix ENR fork ID not updating after timestamp-scheduled forks when no block lands exactly on the fork timestamp (e.g. due to missed slots). The node now detects a fork transition by comparing the resolved protocol spec between a block and its parent, so the ENR is updated on the first block at or after the fork timestamp regardless of whether the exact timestamp was hit. [#10882](https://github.com/hyperledger/besu/issues/10882)
+- Fix ENR fork ID not updating after timestamp-scheduled forks when no block lands exactly on the fork timestamp. [#10882](https://github.com/besu-eth/besu/issues/10882)
 
 ### Additions and Improvements
 - Extract the Plugin API core module: the plugin lifecycle, service lookup and shared block/transaction data views now live in a new `besu-plugin-api-core` artifact, re-exported by `besu-plugin-api` so existing consumers are unaffected. Also adds a minimal `org.hyperledger.besu.plugin.CoreConfiguration` service exposing the node data path. [#10875](https://github.com/besu-eth/besu/pull/10875)

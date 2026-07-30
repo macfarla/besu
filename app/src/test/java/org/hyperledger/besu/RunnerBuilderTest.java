@@ -261,7 +261,7 @@ public final class RunnerBuilderTest {
 
   @Test
   public void timestampForkWithMissedSlotUpdatesNodeRecord() {
-    // Regression test for https://github.com/hyperledger/besu/issues/10882.
+    // Regression test for https://github.com/besu-eth/besu/issues/10882.
     // If no block lands exactly on the fork timestamp (e.g. a slot is missed), the old
     // isOnMilestoneBoundary exact-equality check never fired and the ENR retained the
     // pre-fork fork ID indefinitely. The fix compares the resolved ProtocolSpec between
