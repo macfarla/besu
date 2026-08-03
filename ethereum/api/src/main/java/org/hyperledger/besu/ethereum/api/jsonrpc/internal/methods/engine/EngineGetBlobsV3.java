@@ -74,9 +74,6 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
     implements StreamingJsonRpcMethod {
   private static final Logger LOG = LoggerFactory.getLogger(EngineGetBlobsV3.class);
   public static final int REQUEST_MAX_VERSIONED_HASHES = 128;
-  private static final int PARALLEL_THRESHOLD = Runtime.getRuntime().availableProcessors();
-  private static final int SINGLE_WRITE_THRESHOLD = 16;
-  private static final byte[] RESPONSE_CLOSE = new byte[] {']', '}'};
 
   private final TransactionPool transactionPool;
   private final Counter requestedCounter;
@@ -169,44 +166,24 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
     final List<BlobAndProofV2> results = getBlobV3Result(versionedHashes);
     final long availableCount = results.stream().filter(Objects::nonNull).count();
 
-    final byte[] header =
+    out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())
                 + ",\"result\":[")
-            .getBytes(StandardCharsets.UTF_8);
-
-    if (results.size() <= SINGLE_WRITE_THRESHOLD) {
-      final ByteArrayOutputStream fullBuf =
-          new ByteArrayOutputStream(results.size() * 285_000 + header.length + 2);
-      fullBuf.write(header);
-      for (int i = 0; i < results.size(); i++) {
-        if (i > 0) fullBuf.write(',');
-        final BlobAndProofV2 entry = results.get(i);
-        if (entry == null) {
-          fullBuf.write("null".getBytes(StandardCharsets.UTF_8));
-        } else {
-          mapper.writeValue(fullBuf, entry);
-        }
+            .getBytes(StandardCharsets.UTF_8));
+    final ByteArrayOutputStream entryBuf = new ByteArrayOutputStream(200 * 1024);
+    for (int i = 0; i < results.size(); i++) {
+      entryBuf.reset();
+      if (i > 0) entryBuf.write(',');
+      final BlobAndProofV2 entry = results.get(i);
+      if (entry == null) {
+        entryBuf.write("null".getBytes(StandardCharsets.UTF_8));
+      } else {
+        mapper.writeValue(entryBuf, entry);
       }
-      fullBuf.write(']');
-      fullBuf.write('}');
-      fullBuf.writeTo(out);
-    } else {
-      out.write(header);
-      final ByteArrayOutputStream entryBuf = new ByteArrayOutputStream(285_000);
-      for (int i = 0; i < results.size(); i++) {
-        entryBuf.reset();
-        if (i > 0) entryBuf.write(',');
-        final BlobAndProofV2 entry = results.get(i);
-        if (entry == null) {
-          entryBuf.write("null".getBytes(StandardCharsets.UTF_8));
-        } else {
-          mapper.writeValue(entryBuf, entry);
-        }
-        entryBuf.writeTo(out);
-      }
-      out.write(RESPONSE_CLOSE);
+      entryBuf.writeTo(out);
     }
+    out.write("]}".getBytes(StandardCharsets.UTF_8));
 
     availableCounter.inc(availableCount);
     if (availableCount == versionedHashes.length) {
@@ -234,12 +211,13 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
   }
 
   private @NotNull List<BlobAndProofV2> getBlobV3Result(final VersionedHash[] versionedHashes) {
-    // pool lookups are sequential (single lock); encoding is parallelised when blob count >= cores
+    // Blob pool lookups are sequential (single lock); encoding is parallelised when > 2 blobs
+    // because each 128 KB blob takes ~260 µs to hex-encode and offsets ForkJoin overhead.
     final BlobProofBundle[] bundles = new BlobProofBundle[versionedHashes.length];
     for (int i = 0; i < versionedHashes.length; i++) {
       bundles[i] = transactionPool.getBlobProofBundle(versionedHashes[i]);
     }
-    if (versionedHashes.length >= PARALLEL_THRESHOLD) {
+    if (versionedHashes.length > 2) {
       return Arrays.stream(bundles).parallel().map(this::getBlobAndProofV2).toList();
     }
     return Arrays.stream(bundles).map(this::getBlobAndProofV2).toList();

@@ -55,10 +55,6 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
     implements StreamingJsonRpcMethod {
   private static final Logger LOG = LoggerFactory.getLogger(EngineGetBlobsV2.class);
   public static final int REQUEST_MAX_VERSIONED_HASHES = 128;
-  // parallelise encoding when blob count >= available cores; each 128KB blob ~260µs to hex-encode
-  private static final int PARALLEL_THRESHOLD = Runtime.getRuntime().availableProcessors();
-  private static final int SINGLE_WRITE_THRESHOLD = 16;
-  private static final byte[] RESPONSE_CLOSE = new byte[] {']', '}'};
 
   private final TransactionPool transactionPool;
   private final Counter requestedCounter;
@@ -175,40 +171,26 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
       return;
     }
 
+    // pre-build all entries; parallelise only when multiple blobs (128KB each) offset ForkJoin
+    // overhead
     final List<BlobAndProofV2> builtBundles =
-        validBundles.size() >= PARALLEL_THRESHOLD
+        validBundles.size() > 2
             ? validBundles.parallelStream().map(this::createBlobAndProofV2).toList()
             : validBundles.stream().map(this::createBlobAndProofV2).toList();
 
-    final byte[] header =
+    out.write(
         ("{\"jsonrpc\":\"2.0\",\"id\":"
                 + mapper.writeValueAsString(requestContext.getRequest().getId())
                 + ",\"result\":[")
-            .getBytes(StandardCharsets.UTF_8);
-
-    if (builtBundles.size() <= SINGLE_WRITE_THRESHOLD) {
-      // single write avoids one blocking drain-wait per blob in JsonResponseStreamer
-      final ByteArrayOutputStream fullBuf =
-          new ByteArrayOutputStream(builtBundles.size() * 285_000 + header.length + 2);
-      fullBuf.write(header);
-      for (int i = 0; i < builtBundles.size(); i++) {
-        if (i > 0) fullBuf.write(',');
-        mapper.writeValue(fullBuf, builtBundles.get(i));
-      }
-      fullBuf.write(']');
-      fullBuf.write('}');
-      fullBuf.writeTo(out);
-    } else {
-      out.write(header);
-      final ByteArrayOutputStream blobBuf = new ByteArrayOutputStream(285_000);
-      for (int i = 0; i < builtBundles.size(); i++) {
-        blobBuf.reset();
-        if (i > 0) blobBuf.write(',');
-        mapper.writeValue(blobBuf, builtBundles.get(i));
-        blobBuf.writeTo(out);
-      }
-      out.write(RESPONSE_CLOSE);
+            .getBytes(StandardCharsets.UTF_8));
+    final ByteArrayOutputStream blobBuf = new ByteArrayOutputStream(200 * 1024);
+    for (int i = 0; i < builtBundles.size(); i++) {
+      blobBuf.reset();
+      if (i > 0) blobBuf.write(',');
+      mapper.writeValue(blobBuf, builtBundles.get(i));
+      blobBuf.writeTo(out);
     }
+    out.write("]}".getBytes(StandardCharsets.UTF_8));
     hitCounter.inc();
   }
 
