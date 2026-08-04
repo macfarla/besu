@@ -19,6 +19,7 @@ import static org.hyperledger.besu.datatypes.HardforkId.MainnetHardforkId.OSAKA;
 import org.hyperledger.besu.datatypes.BlobType;
 import org.hyperledger.besu.datatypes.VersionedHash;
 import org.hyperledger.besu.ethereum.ProtocolContext;
+import org.hyperledger.besu.ethereum.api.jsonrpc.JsonResponseStreamer;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
@@ -176,7 +177,8 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
             .getBytes(StandardCharsets.UTF_8);
 
     if (results.size() <= SINGLE_WRITE_THRESHOLD) {
-      // single write avoids one blocking drain-wait per entry in JsonResponseStreamer
+      // Build full response into one buffer and send with Content-Length (not chunked) to avoid
+      // both drain-wait overhead and chunked transfer encoding framing cost.
       final ByteArrayOutputStream fullBuf =
           new ByteArrayOutputStream(results.size() * 285_000 + header.length + 2);
       fullBuf.write(header);
@@ -190,7 +192,11 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
         }
       }
       fullBuf.write(RESPONSE_CLOSE);
-      fullBuf.writeTo(out);
+      if (out instanceof JsonResponseStreamer jrs) {
+        jrs.writeAndClose(fullBuf.toByteArray());
+      } else {
+        fullBuf.writeTo(out);
+      }
     } else {
       out.write(header);
       final ByteArrayOutputStream entryBuf = new ByteArrayOutputStream(285_000);
