@@ -3,6 +3,7 @@
 ## Unreleased Changes
 
 ### Breaking Changes
+- `--network=dev` is no longer supported and Besu will not start; use `ephemery` or Kurtosis for local devnets. [#10836](https://github.com/besu-eth/besu/pull/10836)
 - Plugin API: `HealthCheckProvider` now returns `HealthCheckResult` (status + details map) instead of `boolean` [#10687](https://github.com/besu-eth/besu/issues/10687)
 - The experimental `--Xv5-discovery-enabled` flag is removed; use `--discovery-mode=V5` or `--discovery-mode=BOTH` instead.
 - The genesis file `v5Bootnodes` key is removed; ENR bootnodes must now be listed in the unified `bootnodes` array alongside enode URLs. Besu's bundled network genesis files were migrated automatically - this only affects custom/downstream genesis files that still use the old `v5Bootnodes` key, whose ENR entries will otherwise be silently dropped.
@@ -73,7 +74,6 @@
 - `--Xbft-legacy-protocol-encoding` will be removed once Besu 25.x is no longer supported. [#10499](https://github.com/besu-eth/besu/pull/10499)
 - `--Xsnapsync-synchronizer-pivot-block-distance-before-caching` is deprecated and will be removed in a future release; the flag is now a silent no-op.
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
-- `dev` network is deprecated and will be removed in a future release. Use `ephemery` or kurtosis to run a local devnet. [#10836](https://github.com/besu-eth/besu/pull/10836)
 
 ### Bug fixes
 - Cap the number of concurrently-active JSON-RPC filters (`eth_newFilter`, `eth_newBlockFilter`, `eth_newPendingTransactionFilter`) via `--rpc-max-active-filters`, and expire filters that go unpolled via `--rpc-filter-timeout-seconds`, closing an unbounded-memory-growth path where a client could create filters indefinitely without ever polling or uninstalling them.

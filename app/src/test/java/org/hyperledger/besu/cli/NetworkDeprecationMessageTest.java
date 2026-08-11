@@ -14,10 +14,12 @@
  */
 package org.hyperledger.besu.cli;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.hyperledger.besu.config.NetworkDefinition;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -30,5 +32,23 @@ class NetworkDeprecationMessageTest {
   void shouldThrowErrorForNonDeprecatedNetworks(final NetworkDefinition network) {
     assertThatThrownBy(() -> NetworkDeprecationMessage.generate(network))
         .isInstanceOf(AssertionError.class);
+  }
+
+  @Test
+  void devNetworkFramedMessageContainsExpectedContent() {
+    final String message = NetworkDeprecationMessage.generate(NetworkDefinition.DEV, true);
+    assertThat(message).contains("--network=dev is no longer supported");
+    assertThat(message).contains("PoW mining has been removed");
+    assertThat(message).contains("ephemery");
+    assertThat(message).contains("Kurtosis");
+  }
+
+  @Test
+  void devNetworkCompactMessageIsSingleLine() {
+    final String message = NetworkDeprecationMessage.generate(NetworkDefinition.DEV, false);
+    assertThat(message).doesNotContain("\n");
+    assertThat(message).contains("--network=dev is no longer supported");
+    assertThat(message).contains("PoW mining has been removed");
+    assertThat(message).contains("ephemery");
   }
 }
