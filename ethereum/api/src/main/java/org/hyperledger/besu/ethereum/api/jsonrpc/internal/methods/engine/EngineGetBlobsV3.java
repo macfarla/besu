@@ -179,8 +179,8 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
     if (results.size() <= SINGLE_WRITE_THRESHOLD) {
       // Build full response into one buffer and send with Content-Length (not chunked) to avoid
       // both drain-wait overhead and chunked transfer encoding framing cost.
-      final ByteArrayOutputStream fullBuf =
-          new ByteArrayOutputStream(results.size() * 285_000 + header.length + 2);
+      // ByteArrayOutputStream grows on demand; avoid large upfront allocation for small requests.
+      final ByteArrayOutputStream fullBuf = new ByteArrayOutputStream(16 * 1024);
       fullBuf.write(header);
       for (int i = 0; i < results.size(); i++) {
         if (i > 0) fullBuf.write(',');

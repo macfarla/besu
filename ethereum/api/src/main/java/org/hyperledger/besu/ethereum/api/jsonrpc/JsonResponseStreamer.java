@@ -16,6 +16,8 @@ package org.hyperledger.besu.ethereum.api.jsonrpc;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.vertx.core.buffer.Buffer;
@@ -27,6 +29,7 @@ import org.slf4j.LoggerFactory;
 public class JsonResponseStreamer extends OutputStream {
 
   private static final Logger LOG = LoggerFactory.getLogger(JsonResponseStreamer.class);
+  private static final long DRAIN_TIMEOUT_SECONDS = 60;
 
   private final HttpServerResponse response;
   private final SocketAddress remoteAddress;
@@ -34,6 +37,7 @@ public class JsonResponseStreamer extends OutputStream {
   private boolean chunked = false;
   private boolean closed = false;
   private final AtomicReference<Throwable> failure = new AtomicReference<>();
+  private volatile CountDownLatch pendingDrain;
 
   public JsonResponseStreamer(
       final HttpServerResponse response, final SocketAddress socketAddress) {
@@ -43,6 +47,8 @@ public class JsonResponseStreamer extends OutputStream {
         event -> {
           LOG.debug("Write to remote address {} failed", remoteAddress, event);
           failure.set(event);
+          final CountDownLatch latch = pendingDrain;
+          if (latch != null) latch.countDown();
         });
   }
 
@@ -61,11 +67,36 @@ public class JsonResponseStreamer extends OutputStream {
       chunked = true;
     }
 
-    StreamBackpressure.awaitDrain(response);
+    awaitDrain();
 
     Buffer buf = Buffer.buffer(len);
     buf.appendBytes(bbuf, off, len);
     response.write(buf).onFailure(this::handleFailure);
+  }
+
+  private void awaitDrain() throws IOException {
+    if (!response.writeQueueFull()) return;
+    final CountDownLatch latch = new CountDownLatch(1);
+    pendingDrain = latch;
+    response.drainHandler(v -> latch.countDown());
+    // Check failure after registering pendingDrain in case the connection closed
+    // between the writeQueueFull check above and the pendingDrain assignment.
+    stopOnFailureOrClosed();
+    if (response.writeQueueFull()) {
+      try {
+        if (!latch.await(DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+          throw new IOException("Timed out waiting for write queue to drain");
+        }
+      } catch (final InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException("Interrupted waiting for write queue to drain", e);
+      } finally {
+        pendingDrain = null;
+      }
+    } else {
+      pendingDrain = null;
+    }
+    stopOnFailureOrClosed();
   }
 
   /**
