@@ -195,8 +195,7 @@ public class EngineGetBlobsV2 extends ExecutionEngineJsonRpcMethod
       if (out instanceof JsonResponseStreamer jrs) {
         // Write directly into a Vert.x Buffer to avoid the ByteArrayOutputStream→byte[]→Buffer
         // copies that Buffer.buffer(byte[]) would introduce.
-        final Buffer buf =
-            Buffer.buffer(header.length + builtBundles.size() * 275_000 + 2);
+        final Buffer buf = Buffer.buffer(header.length + builtBundles.size() * 275_000 + 2);
         final var bufOut = new JsonResponseStreamer.VertxBufferOutputStream(buf);
         bufOut.write(header);
         for (int i = 0; i < builtBundles.size(); i++) {
