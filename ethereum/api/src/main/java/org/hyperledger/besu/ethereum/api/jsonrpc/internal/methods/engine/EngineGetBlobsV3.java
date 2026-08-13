@@ -50,6 +50,7 @@ import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import jakarta.validation.constraints.NotNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -179,22 +180,37 @@ public class EngineGetBlobsV3 extends ExecutionEngineJsonRpcMethod
     if (results.size() <= SINGLE_WRITE_THRESHOLD) {
       // Build full response into one buffer and send with Content-Length (not chunked) to avoid
       // both drain-wait overhead and chunked transfer encoding framing cost.
-      // ByteArrayOutputStream grows on demand; avoid large upfront allocation for small requests.
-      final ByteArrayOutputStream fullBuf = new ByteArrayOutputStream(16 * 1024);
-      fullBuf.write(header);
-      for (int i = 0; i < results.size(); i++) {
-        if (i > 0) fullBuf.write(',');
-        final BlobAndProofV2 entry = results.get(i);
-        if (entry == null) {
-          fullBuf.write("null".getBytes(StandardCharsets.UTF_8));
-        } else {
-          mapper.writeValue(fullBuf, entry);
-        }
-      }
-      fullBuf.write(RESPONSE_CLOSE);
       if (out instanceof JsonResponseStreamer jrs) {
-        jrs.writeAndClose(fullBuf.toByteArray());
+        // Write directly into a Vert.x Buffer to avoid the ByteArrayOutputStream→byte[]→Buffer
+        // copies that Buffer.buffer(byte[]) would introduce.
+        final Buffer buf =
+            Buffer.buffer(header.length + results.size() * 275_000 + 2);
+        final var bufOut = new JsonResponseStreamer.VertxBufferOutputStream(buf);
+        bufOut.write(header);
+        for (int i = 0; i < results.size(); i++) {
+          if (i > 0) bufOut.write(',');
+          final BlobAndProofV2 entry = results.get(i);
+          if (entry == null) {
+            bufOut.write("null".getBytes(StandardCharsets.UTF_8));
+          } else {
+            mapper.writeValue(bufOut, entry);
+          }
+        }
+        bufOut.write(RESPONSE_CLOSE);
+        jrs.writeAndClose(buf);
       } else {
+        final ByteArrayOutputStream fullBuf = new ByteArrayOutputStream(16 * 1024);
+        fullBuf.write(header);
+        for (int i = 0; i < results.size(); i++) {
+          if (i > 0) fullBuf.write(',');
+          final BlobAndProofV2 entry = results.get(i);
+          if (entry == null) {
+            fullBuf.write("null".getBytes(StandardCharsets.UTF_8));
+          } else {
+            mapper.writeValue(fullBuf, entry);
+          }
+        }
+        fullBuf.write(RESPONSE_CLOSE);
         fullBuf.writeTo(out);
       }
     } else {

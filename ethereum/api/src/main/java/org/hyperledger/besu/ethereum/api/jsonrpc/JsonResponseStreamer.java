@@ -110,6 +110,41 @@ public class JsonResponseStreamer extends OutputStream {
     response.end(Buffer.buffer(data)).onFailure(this::handleFailure);
   }
 
+  /**
+   * Variant of {@link #writeAndClose(byte[])} that accepts a pre-built Vert.x {@link Buffer},
+   * avoiding the extra copy that {@code Buffer.buffer(byte[])} would introduce.
+   */
+  public void writeAndClose(final Buffer data) throws IOException {
+    stopOnFailureOrClosed();
+    closed = true;
+    response.end(data).onFailure(this::handleFailure);
+  }
+
+  /**
+   * An {@link java.io.OutputStream} that appends directly into a Vert.x {@link Buffer}, avoiding
+   * the intermediate byte array that {@link java.io.ByteArrayOutputStream} requires before the
+   * buffer can be handed to {@link io.vertx.core.http.HttpServerResponse#end(Buffer)}.
+   */
+  public static final class VertxBufferOutputStream extends java.io.OutputStream {
+    private final Buffer buf;
+    private final byte[] singleByte = new byte[1];
+
+    public VertxBufferOutputStream(final Buffer buf) {
+      this.buf = buf;
+    }
+
+    @Override
+    public void write(final int b) {
+      singleByte[0] = (byte) b;
+      buf.appendBytes(singleByte);
+    }
+
+    @Override
+    public void write(final byte[] b, final int off, final int len) {
+      buf.appendBytes(b, off, len);
+    }
+  }
+
   @Override
   public void close() throws IOException {
     if (!closed) {
