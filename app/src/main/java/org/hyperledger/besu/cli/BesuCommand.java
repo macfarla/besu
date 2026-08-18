@@ -38,6 +38,7 @@ import org.hyperledger.besu.cli.config.EthNetworkConfig;
 import org.hyperledger.besu.cli.config.NativeRequirement;
 import org.hyperledger.besu.cli.config.NativeRequirement.NativeRequirementResult;
 import org.hyperledger.besu.cli.config.ProfilesCompletionCandidates;
+import org.hyperledger.besu.cli.converter.CheckpointConverter;
 import org.hyperledger.besu.cli.custom.JsonRPCAllowlistHostsProperty;
 import org.hyperledger.besu.cli.error.BesuExecutionExceptionHandler;
 import org.hyperledger.besu.cli.error.BesuParameterExceptionHandler;
@@ -105,6 +106,7 @@ import org.hyperledger.besu.crypto.SECP256R1;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
 import org.hyperledger.besu.cryptoservices.KeyPairSecurityModule;
 import org.hyperledger.besu.cryptoservices.NodeKey;
+import org.hyperledger.besu.cryptoservices.pluginadapter.SecurityModuleServiceImpl;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
@@ -116,6 +118,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.RpcApis;
 import org.hyperledger.besu.ethereum.api.jsonrpc.authentication.JwtAlgorithm;
 import org.hyperledger.besu.ethereum.api.jsonrpc.ipc.JsonRpcIpcConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.websocket.WebSocketConfiguration;
+import org.hyperledger.besu.ethereum.api.pluginadapter.RpcEndpointServiceImpl;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.chain.ChainDataPruner.ChainPruningStrategy;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
@@ -123,8 +126,10 @@ import org.hyperledger.besu.ethereum.core.MiningParametersMetrics;
 import org.hyperledger.besu.ethereum.core.VersionMetadata;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.transactions.ImmutableTransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration;
+import org.hyperledger.besu.ethereum.eth.transactions.pluginadapter.TransactionPoolValidatorServiceImpl;
 import org.hyperledger.besu.ethereum.mainnet.BalConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryMode;
@@ -137,6 +142,7 @@ import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 import org.hyperledger.besu.ethereum.p2p.peers.StaticNodesParser;
 import org.hyperledger.besu.ethereum.permissioning.LocalPermissioningConfiguration;
 import org.hyperledger.besu.ethereum.permissioning.PermissioningConfiguration;
+import org.hyperledger.besu.ethereum.permissioning.pluginadapter.PermissioningServiceImpl;
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueStorageProvider;
@@ -160,6 +166,7 @@ import org.hyperledger.besu.metrics.prometheus.MetricsConfiguration;
 import org.hyperledger.besu.metrics.vertx.VertxMetricsAdapterFactory;
 import org.hyperledger.besu.nat.NatMethod;
 import org.hyperledger.besu.plugin.CoreConfiguration;
+import org.hyperledger.besu.plugin.rpc.RpcConfiguration;
 import org.hyperledger.besu.plugin.services.BesuConfiguration;
 import org.hyperledger.besu.plugin.services.HealthCheckService;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
@@ -170,16 +177,13 @@ import org.hyperledger.besu.plugin.services.health.ReadinessCheckPlugin;
 import org.hyperledger.besu.plugin.services.securitymodule.SecurityModule;
 import org.hyperledger.besu.plugin.services.storage.DataStorageFormat;
 import org.hyperledger.besu.plugin.services.storage.rocksdb.RocksDBPlugin;
+import org.hyperledger.besu.plugin.storage.StorageConfiguration;
 import org.hyperledger.besu.services.BesuConfigurationImpl;
 import org.hyperledger.besu.services.BesuPluginContextImpl;
 import org.hyperledger.besu.services.BesuPluginServiceRegistrar;
 import org.hyperledger.besu.services.BlockchainServiceImpl;
-import org.hyperledger.besu.services.PermissioningServiceImpl;
 import org.hyperledger.besu.services.PicoCLIOptionsImpl;
-import org.hyperledger.besu.services.RpcEndpointServiceImpl;
-import org.hyperledger.besu.services.SecurityModuleServiceImpl;
 import org.hyperledger.besu.services.StorageServiceImpl;
-import org.hyperledger.besu.services.TransactionPoolValidatorServiceImpl;
 import org.hyperledger.besu.services.TransactionSelectionServiceImpl;
 import org.hyperledger.besu.services.TransactionSimulationServiceImpl;
 import org.hyperledger.besu.services.TransactionValidatorServiceImpl;
@@ -586,6 +590,16 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       split = ",")
   private final Map<Long, Hash> requiredBlocks = new HashMap<>();
 
+  @Option(
+      names = {"--checkpoint"},
+      paramLabel = "<blockHash>:<blockNumber>:<totalDifficulty>",
+      description =
+          "A trusted checkpoint to anchor sync to, overriding any checkpoint configured in the "
+              + "genesis file. Total difficulty may be decimal or 0x-prefixed hex "
+              + "(e.g. 0x<hash>:12345678:58750003716598352816469).",
+      converter = CheckpointConverter.class)
+  private final Checkpoint checkpointOverride = null;
+
   @SuppressWarnings({"FieldCanBeFinal", "FieldMayBeFinal"}) // PicoCLI requires non-final Strings.
   @Option(
       names = {"--key-value-storage"},
@@ -680,6 +694,8 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private Collection<EnodeURLImpl> staticNodes;
   private BesuController besuController;
   private BesuConfigurationImpl pluginCommonConfiguration;
+
+  private Optional<Checkpoint> checkpoint = Optional.empty();
 
   private Vertx vertx;
   private Runner runner;
@@ -800,6 +816,8 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       this.pluginCommonConfiguration = new BesuConfigurationImpl();
       besuPluginContext.addService(BesuConfiguration.class, this.pluginCommonConfiguration);
       besuPluginContext.addService(CoreConfiguration.class, this.pluginCommonConfiguration);
+      besuPluginContext.addService(StorageConfiguration.class, this.pluginCommonConfiguration);
+      besuPluginContext.addService(RpcConfiguration.class, this.pluginCommonConfiguration);
     }
     this.rpcEndpointServiceImpl = rpcEndpointServiceImpl;
     this.transactionSelectionServiceImpl = transactionSelectionServiceImpl;
@@ -995,7 +1013,12 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   @Override
   public void run() {
     if (network != null && network.isDeprecated()) {
-      logger.warn(NetworkDeprecationMessage.generate(network));
+      logger.warn(NetworkDeprecationMessage.generate(network, isPatternLayoutActive()));
+      if (network.isRemoved()) {
+        throw new ParameterException(
+            this.commandLine,
+            "--network=" + network.name().toLowerCase(Locale.ROOT) + " is no longer supported.");
+      }
     }
     try {
       configureLogging(true);
@@ -1548,7 +1571,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     validateRpcOptionsParams();
     validateRpcWsOptions();
     validateChainDataPruningParams();
-    validatePostMergeCheckpointBlockRequirements();
+    resolveAndValidateCheckpoint();
     validateTransactionPoolOptions();
     validateDataStorageOptions();
     validateGraphQlOptions();
@@ -1962,6 +1985,10 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       logger.warn("--sync-min-peers is ignored in FULL sync-mode");
     }
 
+    if (getDefaultSyncModeIfNotSet() == SyncMode.FULL && isOptionSet(commandLine, "--checkpoint")) {
+      logger.warn("--checkpoint is ignored in FULL sync-mode");
+    }
+
     CommandLineUtils.failIfOptionDoesntMeetRequirement(
         commandLine,
         "--Xsnapsync-synchronizer-flat option can only be used when --Xbonsai-full-flat-db-enabled is true",
@@ -2125,6 +2152,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
 
     BesuControllerBuilder besuControllerBuilder =
         controllerBuilder
+            .checkpoint(checkpoint)
             .fromEthNetworkConfig(updateNetworkConfig(network), getDefaultSyncModeIfNotSet())
             .synchronizerConfiguration(buildSyncConfig())
             .ethProtocolConfiguration(unstableEthProtocolOptions.toDomainObject())
@@ -2430,9 +2458,11 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             .p2pAdvertisedHost(p2pAdvertisedHost)
             .p2pListenInterface(p2pListenInterface)
             .p2pListenPort(p2pListenPort)
+            .p2pDiscoveryListenPort(p2PDiscoveryConfig.p2pDiscoveryPort())
             .p2pAdvertisedHostIpv6(p2PDiscoveryConfig.p2pHostIpv6())
             .p2pListenInterfaceIpv6(p2PDiscoveryConfig.p2pInterfaceIpv6())
             .p2pListenPortIpv6(p2PDiscoveryConfig.p2pPortIpv6())
+            .p2pDiscoveryListenPortIpv6(p2PDiscoveryConfig.p2pDiscoveryPortIpv6())
             .networkingConfiguration(unstableNetworkingOptions.toDomainObject())
             .graphQLConfiguration(graphQLConfiguration)
             .jsonRpcConfiguration(jsonRpcConfiguration)
@@ -2766,20 +2796,24 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
    * @throws InvalidConfigurationException if ports are not available.
    */
   protected void checkIfRequiredPortsAreAvailable() {
-    final List<Integer> unavailablePorts = new ArrayList<>();
+    final List<String> unavailablePorts = new ArrayList<>();
     getEffectivePorts().stream()
         .filter(Objects::nonNull)
         .filter(port -> port > 0)
         .forEach(
             port -> {
               if (port.equals(p2PDiscoveryConfig.p2pPort())
-                  && (NetworkUtility.isPortUnavailableForTcp(port)
-                      || NetworkUtility.isPortUnavailableForUdp(port))) {
-                unavailablePorts.add(port);
+                  && NetworkUtility.isPortUnavailableForTcp(port)) {
+                unavailablePorts.add(port + "/TCP");
+              }
+              if (port.equals(p2PDiscoveryConfig.p2pDiscoveryPort())
+                  && NetworkUtility.isPortUnavailableForUdp(port)) {
+                unavailablePorts.add(port + "/UDP");
               }
               if (!port.equals(p2PDiscoveryConfig.p2pPort())
+                  && !port.equals(p2PDiscoveryConfig.p2pDiscoveryPort())
                   && NetworkUtility.isPortUnavailableForTcp(port)) {
-                unavailablePorts.add(port);
+                unavailablePorts.add(port + "/TCP");
               }
             });
     if (!unavailablePorts.isEmpty()) {
@@ -2798,6 +2832,11 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private List<Integer> getEffectivePorts() {
     final List<Integer> effectivePorts = new ArrayList<>();
     addPortIfEnabled(effectivePorts, p2PDiscoveryOptions.p2pPort, p2PDiscoveryOptions.p2pEnabled);
+    if (p2PDiscoveryOptions.p2pDiscoveryPort != null
+        && !p2PDiscoveryOptions.p2pDiscoveryPort.equals(p2PDiscoveryOptions.p2pPort)) {
+      addPortIfEnabled(
+          effectivePorts, p2PDiscoveryOptions.p2pDiscoveryPort, p2PDiscoveryOptions.p2pEnabled);
+    }
     addPortIfEnabled(
         effectivePorts, graphQlOptions.getGraphQLHttpPort(), graphQlOptions.isGraphQLHttpEnabled());
     addPortIfEnabled(
@@ -2886,17 +2925,28 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     }
   }
 
-  private void validatePostMergeCheckpointBlockRequirements() {
+  private void resolveAndValidateCheckpoint() {
+    if (checkpointOverride != null) {
+      checkpoint = Optional.of(checkpointOverride);
+      return;
+    }
+
     final GenesisConfigOptions genesisConfigOptions = readGenesisConfigOptions();
     final CheckpointConfigOptions checkpointConfigOptions =
         genesisConfigOptions.getCheckpointOptions();
 
-    // Only validate if checkpoint config is not the default (empty) one
-    if (checkpointConfigOptions != CheckpointConfigOptions.DEFAULT) {
-      if (!checkpointConfigOptions.isValid()) {
-        throw new InvalidConfigurationException(
-            "The checkpoint block configured in the genesis file is not valid.");
-      }
+    if (checkpointConfigOptions == CheckpointConfigOptions.DEFAULT) {
+      return;
+    }
+    if (!checkpointConfigOptions.isValid()) {
+      throw new InvalidConfigurationException(
+          "The checkpoint block configured in the genesis file is not valid.");
+    }
+    try {
+      checkpoint = Checkpoint.fromConfig(checkpointConfigOptions);
+    } catch (final IllegalArgumentException e) {
+      throw new InvalidConfigurationException(
+          "The checkpoint block configured in the genesis file is not valid: " + e.getMessage());
     }
   }
 
