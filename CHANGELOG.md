@@ -30,6 +30,7 @@
 - Fix `ibft_*` and `qbft_*` JSON-RPC methods returning `Method not enabled` on IBFT2->QBFT migration networks (genesis containing both `ibft2` and `qbft` sections). [#10679](https://github.com/besu-eth/besu/issues/10679)
 - Fix `admin_nodeInfo` reporting wrong RLPx/discovery ephemeral ports under `--nat-method=DOCKER`, due to a swapped NAT port mapping and a stale pre-bind snapshot. [#10860](https://github.com/besu-eth/besu/pull/10860)
 - Recover from restart during flatDB heal sync step [#10883](https://github.com/besu-eth/besu/pull/10883)
+- Fix `eth_call`/`eth_estimateGas` returning blob base fee of 0 in no-fee simulation mode (`allowExceedingBalance`). EIP-4844 requires `MIN_BLOB_GASPRICE = 1`, so contracts gating on `BLOBBASEFEE >= 1` would incorrectly revert in simulation. [#10899](https://github.com/besu-eth/besu/pull/10899)
 
 ### Additions and Improvements
 - Extract the Plugin API core module: the plugin lifecycle, service lookup and shared block/transaction data views now live in a new `besu-plugin-api-core` artifact, re-exported by `besu-plugin-api` so existing consumers are unaffected. Also adds a minimal `org.hyperledger.besu.plugin.CoreConfiguration` service exposing the node data path. [#10875](https://github.com/besu-eth/besu/pull/10875)
