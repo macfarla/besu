@@ -22,6 +22,7 @@ import org.hyperledger.besu.crypto.KeyPair;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.TransactionType;
+import org.hyperledger.besu.datatypes.VersionedHash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
@@ -30,6 +31,7 @@ import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.core.TransactionTestFixture;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -93,6 +95,27 @@ public class DebugGetRawTransactionTest {
     assertThat(raw.get(0))
         .as("first byte must be the EIP-2718 type byte for type %s", type)
         .isEqualTo(type.getSerializedType());
+  }
+
+  @Test
+  public void blobTransactionRawBytesHashMatchesTxHash() {
+    final Transaction tx =
+        new TransactionTestFixture()
+            .type(TransactionType.BLOB)
+            .versionedHashes(Optional.of(List.of(VersionedHash.DEFAULT_VERSIONED_HASH)))
+            .createTransaction(KEY_PAIR);
+    mockTransaction(tx);
+
+    final JsonRpcRequestContext request = requestFor(tx.getHash().toHexString());
+    final JsonRpcSuccessResponse response = (JsonRpcSuccessResponse) method.response(request);
+
+    final Bytes raw = Bytes.fromHexString((String) response.getResult());
+    assertThat(Hash.hash(raw))
+        .as("keccak256(raw) must equal txHash for BLOB type")
+        .isEqualTo(tx.getHash());
+    assertThat(raw.get(0))
+        .as("first byte must be the EIP-2718 type byte (0x03) for BLOB")
+        .isEqualTo(TransactionType.BLOB.getSerializedType());
   }
 
   private void mockTransaction(final Transaction tx) {
