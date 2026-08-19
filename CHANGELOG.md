@@ -23,6 +23,7 @@
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
 
 ### Bug fixes
+- Fix `debug_getRawTransaction` returning bare RLP payload (missing EIP-2718 type-byte prefix) for typed transactions, causing `keccak256(raw) != txHash`. Fix `debug_getRawReceipts` double-wrapping typed receipts in an outer RLP byte-string instead of returning the raw `type || rlp(payload)` wire encoding. [#11083](https://github.com/besu-eth/besu/pull/11083)
 - Port clash detection during Besu start now treats TCP and UDP ports separately. [#10904](https://github.com/besu-eth/besu/issues/10904)
 - Fix `NullPointerException` in the JSON-RPC HTTP timeout handler for batch (array) requests. [11023](https://github.com/besu-eth/besu/pull/11023)
 - Fix `--discovery-mode=BOTH`/`V5` re-proposing its entire known-peer table for outbound connection on every discovery tick, driving excess CPU/GC from wasted RLPx handshakes. [#11027](https://github.com/besu-eth/besu/pull/11027)
