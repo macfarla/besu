@@ -105,7 +105,7 @@ public class DebugGetRawReceiptsTest {
   @ParameterizedTest
   @EnumSource(
       value = TransactionType.class,
-      names = {"ACCESS_LIST", "EIP1559"})
+      names = {"ACCESS_LIST", "EIP1559", "BLOB", "DELEGATE_CODE"})
   public void typedReceiptRawStartsWithTypeByte(final TransactionType type) {
     final long blockNumber = 42L;
     final Hash blockHash = Hash.fromHexStringLenient("0x1234");

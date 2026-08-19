@@ -64,7 +64,7 @@ public class DebugGetRawTransactionTest {
   @ParameterizedTest
   @EnumSource(
       value = TransactionType.class,
-      names = {"FRONTIER", "ACCESS_LIST", "EIP1559"})
+      names = {"FRONTIER", "ACCESS_LIST", "EIP1559", "DELEGATE_CODE"})
   public void rawBytesHashMatchesTxHashForAllTypes(final TransactionType type) {
     final Transaction tx = new TransactionTestFixture().type(type).createTransaction(KEY_PAIR);
     mockTransaction(tx);
@@ -81,7 +81,7 @@ public class DebugGetRawTransactionTest {
   @ParameterizedTest
   @EnumSource(
       value = TransactionType.class,
-      names = {"ACCESS_LIST", "EIP1559"})
+      names = {"ACCESS_LIST", "EIP1559", "DELEGATE_CODE"})
   public void typedTransactionRawStartsWithTypeByte(final TransactionType type) {
     final Transaction tx = new TransactionTestFixture().type(type).createTransaction(KEY_PAIR);
     mockTransaction(tx);
