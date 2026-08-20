@@ -2,6 +2,8 @@
 
 ## Unreleased Changes
 
+## 26.8.0
+
 ### Breaking Changes
 - `--network=dev` is no longer supported; use `ephemery` or Kurtosis for local devnets. [#10836](https://github.com/besu-eth/besu/pull/10836)
 - Plugin API: `HealthCheckProvider` now returns `HealthCheckResult` (status + details map) instead of `boolean` [#10687](https://github.com/besu-eth/besu/issues/10687)
