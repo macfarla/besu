@@ -184,6 +184,7 @@ public class PeerTaskExecutor {
       } catch (InterruptedException | TimeoutException e) {
         peer.recordRequestTimeout(peerTaskSubProtocol.getName(), requestMessageData.getCode());
         timeoutCounter.labels(taskClassName).inc();
+        LOG.debug("Timeout executing {} against peer {}", taskClassName, peer.getLoggableId());
         executorResult =
             new PeerTaskExecutorResult<>(
                 Optional.empty(), PeerTaskExecutorResponseCode.TIMEOUT, List.of(peer));
