@@ -128,7 +128,7 @@ public class TestingCommitBlockV1 implements JsonRpcMethod {
               .filter(s -> !s.isEmpty())
               .map(Bytes::fromHexString)
               .orElse(Bytes.EMPTY);
-    } catch (JsonRpcParameterException e) {
+    } catch (JsonRpcParameterException | IllegalArgumentException e) {
       throw new InvalidJsonRpcParameters(
           "Invalid extraData parameter (index 2)", RpcErrorType.INVALID_PARAMS, e);
     }
