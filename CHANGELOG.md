@@ -23,6 +23,11 @@
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
 
 ### Bug fixes
+- `debug_getRawReceipts` now accepts a block hash as well as a block number or tag. [#11156](https://github.com/besu-eth/besu/pull/11156)
+- Support dynamic reorg tracking for transaction receipt logs in `eth_getTransactionReceipt` and `eth_getBlockReceipts` by populating the `removed` field. [#11076](https://github.com/besu-eth/besu/pull/11076)
+- `testing_buildBlockV1` now uses the genesis gas limit as the effective target when no `targetGasLimit` is specified, so the gas limit calculator applies a one-step decrement rather than holding the parent value. [#11166](https://github.com/besu-eth/besu/pull/11166)
+- Keep `evmtool state-test --json` stdout valid JSONL by omitting the human-readable final summary in that mode. [#11127](https://github.com/besu-eth/besu/issues/11127)
+- `admin_generateLogBloomCache` now clamps both block bounds to the chain head. [#11135](https://github.com/besu-eth/besu/pull/11135)
 - `eth_getTransactionByBlockHashAndIndex` reported a malformed block hash at parameter 0 as `Invalid transaction hash params`; it now reports `Invalid block hash params`. [#11119](https://github.com/besu-eth/besu/pull/11119)
 - Fix `debug_getRawTransaction` returning bare RLP payload (missing EIP-2718 type-byte prefix) for typed transactions, causing `keccak256(raw) != txHash`. Fix `debug_getRawReceipts` double-wrapping typed receipts in an outer RLP byte-string instead of returning the raw `type || rlp(payload)` wire encoding. [#11083](https://github.com/besu-eth/besu/pull/11083)
 - Port clash detection during Besu start now treats TCP and UDP ports separately. [#10904](https://github.com/besu-eth/besu/issues/10904)
@@ -36,7 +41,6 @@
 - Fix wrong Bonsai storage root for same-block selfdestruct+recreate with unchanged slot values. [#10979](https://github.com/besu-eth/besu/pull/10979)
 - `eth_simulateV1` no longer applies EIP-7825's transaction gas limit cap to simulation gas, fixing incorrect block/transaction hashes on Osaka [#10885](https://github.com/besu-eth/besu/pull/10885)
 - Move to a new BFT round and select a new proposer for a block if transactions arrive at a non-proposing node after blockperiodseconds but before emptyblockperiodseconds [#11031](https://github.com/besu-eth/besu/pull/11031) 
-- Fix txpool incorrectly evicting authority pending transactions when EIP-7702 delegation tuples are skipped during block execution
 - Complete QBFT votes in a reasonable time when `empyblockperiodseconds` is set by treating QBFT votes as "non empty blocks" [#11111](https://github.com/besu-eth/besu/pull/11111)
 
 ### Additions and Improvements
@@ -55,6 +59,8 @@
 - Add `--p2p-discovery-port` and `--p2p-discovery-port-ipv6` flags to configure a separate UDP port for devp2p peer discovery, independent of the TCP p2p port. Specify `0` to request an ephemeral port from the OS. [#10718](https://github.com/besu-eth/besu/pull/10718)
 - Pending peer request iteration: `streamAvailablePeers()` scan replaced with an allocation-free capacity check. Reduces lock contention and GC pressure under a backlog of pending peer requests. [#10900](https://github.com/besu-eth/besu/pull/10900)
 - Engine API methods now execute concurrently, with only `engine_forkchoiceUpdated` and `engine_newPayload` calls processed serially in arrival order as the Engine API spec mandates. Previously all engine calls were serialized on a single thread, so light requests like `engine_getBlobsV2` could queue behind a block import and exceed the consensus client's timeout. [#11053](https://github.com/besu-eth/besu/pull/11053)
+- Add a server-side cap on EVM steps captured per debug_traceCallMany to prevent unbounded execution [#11142](https://github.com/besu-eth/besu/pull/11142)
+- Add EIP-8070 Engine API surface: `engine_getBlobsV4` and custodyColumns [#11141](https://github.com/besu-eth/besu/pull/11141)
 
 ## 26.8.0
 
@@ -83,7 +89,7 @@
 - Bound the snap sync storage sub-range split count to prevent unbounded memory growth under a malformed snap response.
 - Added a configurable range cap (--graphql-max-blocks-range, default 5000) for GraphQL blocks(from, to) range queries; queries exceeding the cap are cancelled.
 - Bound secp256k1 signature r and s values to [1, n) on signature recovery, fixing a consensus divergence with EIP-7702 code delegations.
-- Add a server-side cap on EVM steps captured per debug_traceCall, debug_traceTransaction, and related trace methods to prevent unbounded execution.
+- Add a server-side cap on EVM steps captured per debug_traceCall, debug_traceTransaction, and related trace methods to prevent unbounded execution [#11100](https://github.com/besu-eth/besu/pull/11100)
 - Apply --rpc-max-logs-range to eth_getFilterLogs and eth_newFilter to prevent unbounded log queries.
 - Fix optimistic parallel execution materialising an empty account for an unrewarded fee recipient, causing incorrect EIP-158 account deletion.
 - Remove `System.out`/`System.err` logging from `P256VerifyPrecompiledContract` and `BlockchainQueries` — these could leak sensitive data to stdout/stderr in production.
