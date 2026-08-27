@@ -16,11 +16,13 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.INTERNAL_ERROR;
 
+import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.api.ApiConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameter;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameterOrBlockHash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter.JsonRpcParameterException;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TransactionTraceParams;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
@@ -87,6 +89,31 @@ public class DebugTraceCall extends AbstractTraceCall {
       throw new InvalidJsonRpcParameters(
           e.getMessage(), RpcErrorType.INVALID_TRANSACTION_TRACE_PARAMS, e);
     }
+  }
+
+  @Override
+  protected Object findResultByParamType(final JsonRpcRequestContext request) {
+    final Optional<BlockParameterOrBlockHash> maybeBlockParam;
+    try {
+      maybeBlockParam = request.getOptionalParameter(1, BlockParameterOrBlockHash.class);
+    } catch (JsonRpcParameterException e) {
+      throw new InvalidJsonRpcParameters(
+          "Invalid block parameter (index 1)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
+    }
+
+    final BlockParameterOrBlockHash blockParam =
+        maybeBlockParam.orElse(BlockParameterOrBlockHash.LATEST);
+
+    if (blockParam.getBlockHash()) {
+      final Optional<Hash> maybeHash = blockParam.getHash();
+      return maybeHash
+          .flatMap(hash -> getBlockchainQueries().getBlockHeaderByHash(hash))
+          .map(header -> resultByBlockNumber(request, header.getNumber()))
+          .orElse(
+              new JsonRpcErrorResponse(request.getRequest().getId(), RpcErrorType.BLOCK_NOT_FOUND));
+    }
+
+    return super.findResultByParamType(request);
   }
 
   @Override
