@@ -47,6 +47,7 @@ import org.hyperledger.besu.plugin.data.TransactionSelectionResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -188,7 +189,15 @@ public class TestingCommitBlockV1 implements JsonRpcMethod {
               Optional.of(withdrawals),
               Optional.ofNullable(payloadAttributes.getParentBeaconBlockRoot()),
               Optional.ofNullable(payloadAttributes.getSlotNumber()),
-              Optional.ofNullable(payloadAttributes.getTargetGasLimit()),
+              Optional.of(
+                  Objects.requireNonNullElseGet(
+                      payloadAttributes.getTargetGasLimit(),
+                      () ->
+                          protocolContext
+                              .getBlockchain()
+                              .getGenesisBlock()
+                              .getHeader()
+                              .getGasLimit())),
               parentHeader);
 
       if (transactionsProvided) {
