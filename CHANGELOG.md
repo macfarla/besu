@@ -24,6 +24,7 @@
 
 ### Bug fixes
 - `debug_getRawReceipts` now accepts a block hash as well as a block number or tag. [#11156](https://github.com/besu-eth/besu/pull/11156)
+- `debug_traceCall` now accepts a block hash as well as a block number or tag. [#11169](https://github.com/besu-eth/besu/pull/11169)
 - Support dynamic reorg tracking for transaction receipt logs in `eth_getTransactionReceipt` and `eth_getBlockReceipts` by populating the `removed` field. [#11076](https://github.com/besu-eth/besu/pull/11076)
 - `testing_buildBlockV1` now uses the genesis gas limit as the effective target when no `targetGasLimit` is specified, so the gas limit calculator applies a one-step decrement rather than holding the parent value. [#11166](https://github.com/besu-eth/besu/pull/11166)
 - Keep `evmtool state-test --json` stdout valid JSONL by omitting the human-readable final summary in that mode. [#11127](https://github.com/besu-eth/besu/issues/11127)
