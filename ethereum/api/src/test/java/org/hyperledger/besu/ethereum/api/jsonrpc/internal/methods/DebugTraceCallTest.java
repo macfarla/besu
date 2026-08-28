@@ -35,6 +35,7 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.transaction.ImmutableCallParameter;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 
+import java.util.Map;
 import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -96,10 +97,57 @@ public class DebugTraceCallTest {
         .isNotEqualTo(RpcErrorType.BLOCK_NOT_FOUND);
   }
 
+  @Test
+  void requireCanonicalReturnErrorForNonCanonicalBlockHash() {
+    final BlockHeader header =
+        new BlockHeaderTestFixture().number(KNOWN_BLOCK_NUMBER).buildHeader();
+    when(blockchainQueries.getBlockHeaderByHash(KNOWN_BLOCK_HASH)).thenReturn(Optional.of(header));
+    when(blockchainQueries.blockIsOnCanonicalChain(header.getBlockHash())).thenReturn(false);
+
+    final JsonRpcRequestContext request =
+        requestWithBlockHashObject(KNOWN_BLOCK_HASH.toHexString(), true);
+
+    final JsonRpcResponse response = method.response(request);
+
+    assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
+    assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualTo(RpcErrorType.JSON_RPC_NOT_CANONICAL_ERROR);
+  }
+
+  @Test
+  void eip1898BlockNumberObjectFormResolvesCorrectly() {
+    final BlockHeader header =
+        new BlockHeaderTestFixture().number(KNOWN_BLOCK_NUMBER).buildHeader();
+    when(blockchainQueries.getBlockHeaderByNumber(KNOWN_BLOCK_NUMBER))
+        .thenReturn(Optional.of(header));
+    final ProtocolSpec protocolSpec = mock(ProtocolSpec.class);
+    when(protocolSchedule.getByBlockHeader(any())).thenReturn(protocolSpec);
+    when(transactionSimulator.process(any(), any(), any(), any(), any(), eq(header)))
+        .thenReturn(Optional.empty());
+
+    final JsonRpcRequestContext request =
+        requestWithParam(Map.of("blockNumber", "0x" + Long.toHexString(KNOWN_BLOCK_NUMBER)));
+
+    final JsonRpcResponse response = method.response(request);
+
+    assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
+    assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isNotEqualTo(RpcErrorType.BLOCK_NOT_FOUND);
+  }
+
   private JsonRpcRequestContext requestWithBlockHash(final String blockHash) {
+    return requestWithParam(blockHash);
+  }
+
+  private JsonRpcRequestContext requestWithBlockHashObject(
+      final String blockHash, final boolean requireCanonical) {
+    return requestWithParam(Map.of("blockHash", blockHash, "requireCanonical", requireCanonical));
+  }
+
+  private JsonRpcRequestContext requestWithParam(final Object blockParam) {
     final var callParams =
         ImmutableCallParameter.builder().to(Address.fromHexString("0x1234")).build();
     return new JsonRpcRequestContext(
-        new JsonRpcRequest("2.0", "debug_traceCall", new Object[] {callParams, blockHash}));
+        new JsonRpcRequest("2.0", "debug_traceCall", new Object[] {callParams, blockParam}));
   }
 }

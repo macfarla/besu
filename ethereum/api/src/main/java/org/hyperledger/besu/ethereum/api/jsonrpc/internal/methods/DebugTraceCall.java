@@ -16,7 +16,6 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.INTERNAL_ERROR;
 
-import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.api.ApiConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
@@ -31,6 +30,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.OpCodeLoggerTracerResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
+import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.debug.TraceOptions;
 import org.hyperledger.besu.ethereum.debug.TracerType;
 import org.hyperledger.besu.ethereum.mainnet.ImmutableTransactionValidationParams;
@@ -42,6 +42,7 @@ import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
 
 import java.util.Optional;
+import java.util.OptionalLong;
 
 public class DebugTraceCall extends AbstractTraceCall {
   private static final TransactionValidationParams TRANSACTION_VALIDATION_PARAMS =
@@ -93,40 +94,48 @@ public class DebugTraceCall extends AbstractTraceCall {
 
   @Override
   protected Object findResultByParamType(final JsonRpcRequestContext request) {
-    final Optional<BlockParameterOrBlockHash> maybeBlockParam;
+    final BlockParameterOrBlockHash blockParam;
     try {
-      maybeBlockParam = request.getOptionalParameter(1, BlockParameterOrBlockHash.class);
+      blockParam =
+          request
+              .getOptionalParameter(1, BlockParameterOrBlockHash.class)
+              .orElse(BlockParameterOrBlockHash.LATEST);
     } catch (JsonRpcParameterException e) {
       throw new InvalidJsonRpcParameters(
           "Invalid block parameter (index 1)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
     }
 
-    final BlockParameterOrBlockHash blockParam =
-        maybeBlockParam.orElse(BlockParameterOrBlockHash.LATEST);
-
     if (blockParam.getBlockHash()) {
-      final Optional<Hash> maybeHash = blockParam.getHash();
-      return maybeHash
-          .flatMap(hash -> getBlockchainQueries().getBlockHeaderByHash(hash))
-          .map(header -> resultByBlockNumber(request, header.getNumber()))
-          .orElse(
-              new JsonRpcErrorResponse(request.getRequest().getId(), RpcErrorType.BLOCK_NOT_FOUND));
+      final Optional<BlockHeader> maybeHeader =
+          blockParam.getHash().flatMap(hash -> getBlockchainQueries().getBlockHeaderByHash(hash));
+      if (maybeHeader.isEmpty()) {
+        return new JsonRpcErrorResponse(request.getRequest().getId(), RpcErrorType.BLOCK_NOT_FOUND);
+      }
+      final BlockHeader header = maybeHeader.get();
+      if (blockParam.getRequireCanonical()
+          && !getBlockchainQueries().blockIsOnCanonicalChain(header.getBlockHash())) {
+        return new JsonRpcErrorResponse(
+            request.getRequest().getId(), RpcErrorType.JSON_RPC_NOT_CANONICAL_ERROR);
+      }
+      return resultByBlockNumber(request, header.getNumber());
     }
 
-    return super.findResultByParamType(request);
+    if (blockParam.isLatest()) return latestResult(request);
+    if (blockParam.isFinalized()) return finalizedResult(request);
+    if (blockParam.isSafe()) return safeResult(request);
+    if (blockParam.isPending()) return pendingResult(request);
+
+    final OptionalLong blockNumber = blockParam.getNumber();
+    if (blockNumber.isEmpty()) {
+      return new JsonRpcErrorResponse(
+          request.getRequest().getId(), RpcErrorType.INVALID_BLOCK_PARAMS);
+    }
+    return resultByBlockNumber(request, blockNumber.getAsLong());
   }
 
   @Override
   protected BlockParameter blockParameter(final JsonRpcRequestContext request) {
-    final Optional<BlockParameter> maybeBlockParameter;
-    try {
-      maybeBlockParameter = request.getOptionalParameter(1, BlockParameter.class);
-    } catch (JsonRpcParameterException e) {
-      throw new InvalidJsonRpcParameters(
-          "Invalid block parameter (index 1)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
-    }
-
-    return maybeBlockParameter.orElse(BlockParameter.LATEST);
+    return BlockParameter.LATEST;
   }
 
   @Override
