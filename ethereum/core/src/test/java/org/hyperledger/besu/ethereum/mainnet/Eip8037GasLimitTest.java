@@ -17,6 +17,8 @@ package org.hyperledger.besu.ethereum.mainnet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.datatypes.Address;
@@ -188,6 +190,47 @@ class Eip8037GasLimitTest {
   }
 
   @Test
+  void exceptionalHaltShouldNotDeleteAccountsViaSelfDestructs() {
+    // Regression test: a failed transaction once deleted the accounts its selfdestruct markers
+    // named, wiping pre-existing accounts from world state. EXCEPTIONAL_HALT is the cheapest way
+    // to reach that failure branch — driving regular gas past TX_MAX_GAS_LIMIT reaches the same
+    // one.
+    setupCommonMocks(20_000_000L);
+
+    final Address childAddress =
+        Address.fromHexString("0xf0e10967a8e01280baa0880522da22e9e4bbb9b3");
+
+    doAnswer(
+            invocation -> {
+              final MessageFrame frame = invocation.getArgument(0);
+              // Simulate a successful CREATE2→SELFDESTRUCT child: add markers to the frame.
+              frame.addCreate(childAddress);
+              frame.addSelfDestruct(childAddress);
+              frame.setExceptionalHaltReason(Optional.of(ExceptionalHaltReason.INSUFFICIENT_GAS));
+              frame.setGasRemaining(0L);
+              frame.getMessageFrameStack().pop();
+              return null;
+            })
+        .when(messageCallProcessor)
+        .process(any(), any());
+
+    final TransactionProcessingResult result =
+        createProcessor()
+            .processTransaction(
+                worldState,
+                blockHeader,
+                transaction,
+                Address.fromHexString("0x4242424242424242424242424242424242424242"),
+                blockHashLookup,
+                ImmutableTransactionValidationParams.builder().build(),
+                Wei.ZERO);
+
+    assertThat(result.isSuccessful()).isFalse();
+    // The pre-existing child account must NOT be deleted even though it was in selfDestructs.
+    verify(worldState, never()).deleteAccount(childAddress);
+  }
+
+  @Test
   void stateGasCanPushTotalBeyondTxMaxGasLimitWithoutRevert() {
     // Total gas > TX_MAX_GAS_LIMIT but regular gas portion is within limit
     setupCommonMocks(20_000_000L);
@@ -200,7 +243,10 @@ class Eip8037GasLimitTest {
               // stateGas = 5M
               // regularConsumed = 19M - 5M = 14M < TX_MAX_GAS_LIMIT -> passes
               frame.setGasRemaining(1_000_000L);
-              frame.incrementStateGasUsed(5_000_000L);
+              // Simulate 5M of state gas consumed: seed the reservoir and draw it down so
+              // stateGasUsed reaches 5M without touching the 1M of regular gas left.
+              frame.setStateGasReservoir(5_000_000L);
+              frame.consumeStateGas(5_000_000L);
               frame.getMessageFrameStack().pop();
               return null;
             })

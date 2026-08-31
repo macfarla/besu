@@ -15,6 +15,7 @@
 package org.hyperledger.besu.ethereum.eth.sync.snapsync.v2;
 
 import org.hyperledger.besu.datatypes.Hash;
+import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.sync.ChainDownloader;
@@ -28,6 +29,7 @@ import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePers
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.v2.SnapV2AccountRangeRequest;
 import org.hyperledger.besu.ethereum.eth.sync.worldstate.WorldStateDownloader;
+import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.trie.RangeManager;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorageCoordinator;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
@@ -36,6 +38,7 @@ import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.services.tasks.InMemoryTasksPriorityQueues;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -52,6 +55,9 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
 
   private static final Logger LOG = LoggerFactory.getLogger(SnapV2WorldStateDownloader.class);
 
+  static final int NO_PEER_RETRY_DELAY_MILLISECONDS = 5_000;
+  private static final long NO_PEER_LOG_INTERVAL_MS = 30_000L;
+
   private final long minMillisBeforeStalling;
   private final Clock clock;
   private final MetricsSystem metricsSystem;
@@ -62,15 +68,21 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
   private final int maxOutstandingRequests;
   private final int maxNodeRequestsWithoutProgress;
   private final WorldStateStorageCoordinator worldStateStorageCoordinator;
+  private final MutableBlockchain blockchain;
   private final AtomicReference<SnapV2WorldDownloadState> downloadState = new AtomicReference<>();
   private final SyncDurationMetrics syncDurationMetrics;
   private volatile WorldStateHealFinishedListener worldStateHealFinishedListener;
   private volatile SnapV2PivotCatchupListener pivotCatchupListener;
+  private final SnapV2BlockAccessListApplier blockAccessListApplier;
+  private final SnapV2ReorgHealer reorgHealer;
+  private long lastNoPeerLogMillis;
 
   public SnapV2WorldStateDownloader(
       final EthContext ethContext,
       final SnapSyncStatePersistenceManager snapContext,
+      final MutableBlockchain blockchain,
       final WorldStateStorageCoordinator worldStateStorageCoordinator,
+      final ProtocolSchedule protocolSchedule,
       final InMemoryTasksPriorityQueues<SnapDataRequest> snapTaskCollection,
       final SnapSyncConfiguration snapSyncConfiguration,
       final int maxOutstandingRequests,
@@ -81,6 +93,7 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
       final SyncDurationMetrics syncDurationMetrics) {
     this.ethContext = ethContext;
     this.worldStateStorageCoordinator = worldStateStorageCoordinator;
+    this.blockchain = blockchain;
     this.snapContext = snapContext;
     this.snapTaskCollection = snapTaskCollection;
     this.snapSyncConfiguration = snapSyncConfiguration;
@@ -90,6 +103,16 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
     this.clock = clock;
     this.metricsSystem = metricsSystem;
     this.syncDurationMetrics = syncDurationMetrics;
+    this.blockAccessListApplier =
+        new SnapV2BlockAccessListApplier(
+            worldStateStorageCoordinator, blockchain, protocolSchedule);
+    this.reorgHealer =
+        new SnapV2ReorgHealer(
+            blockchain,
+            worldStateStorageCoordinator,
+            protocolSchedule,
+            SnapV2ReorgStateFetcher.fromEthContext(
+                ethContext, metricsSystem, worldStateStorageCoordinator));
 
     metricsSystem.createIntegerGauge(
         BesuMetricCategory.SYNCHRONIZER,
@@ -134,6 +157,15 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
         return failed;
       }
 
+      if (ethContext.getEthPeers().peerCount() == 0) {
+        logNoPeersWaiting();
+        return ethContext
+            .getScheduler()
+            .scheduleFutureTask(
+                () -> run(fastSyncActions, snapSyncState),
+                Duration.ofMillis(NO_PEER_RETRY_DELAY_MILLISECONDS));
+      }
+
       final BlockHeader header = snapSyncState.getPivotBlockHeader().orElseThrow();
       final Hash stateRoot = header.getStateRoot();
       LOG.info(
@@ -148,7 +180,14 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
       final SnapSyncMetricsManager snapsyncMetricsManager =
           new SnapSyncMetricsManager(metricsSystem, ethContext);
       final DynamicPivotBlockSelector pivotBlockSelector =
-          new DynamicPivotBlockSelector(ethContext, fastSyncActions, snapSyncState, null);
+          new DynamicPivotBlockSelector(
+              ethContext,
+              fastSyncActions,
+              snapSyncState,
+              null,
+              snapSyncConfiguration.getPivotBlockCheckIntervalMillis());
+      final long storagePipelineInFlightCapacity =
+          (long) snapSyncConfiguration.getStorageCountPerRequest() * maxOutstandingRequests;
       final SnapV2WorldDownloadState newDownloadState =
           new SnapV2WorldDownloadState(
               worldStateStorageCoordinator,
@@ -161,7 +200,12 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
               clock,
               syncDurationMetrics,
               worldStateHealFinishedListener,
-              pivotCatchupListener);
+              pivotCatchupListener,
+              blockAccessListApplier,
+              reorgHealer,
+              blockchain,
+              ethContext,
+              storagePipelineInFlightCapacity);
 
       final Map<Bytes32, Bytes32> ranges = RangeManager.generateAllRanges(16);
       snapsyncMetricsManager.initRange(ranges);
@@ -181,6 +225,7 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
               metricsSystem);
 
       downloadState.set(newDownloadState);
+      newDownloadState.startHeartbeat();
       return newDownloadState.startDownload(downloadProcess, ethContext.getScheduler());
     }
   }
@@ -203,5 +248,16 @@ public class SnapV2WorldStateDownloader implements WorldStateDownloader {
   @Override
   public Optional<Long> getKnownStates() {
     return Optional.empty();
+  }
+
+  private void logNoPeersWaiting() {
+    final long now = System.currentTimeMillis();
+    if (now - lastNoPeerLogMillis >= NO_PEER_LOG_INTERVAL_MS) {
+      lastNoPeerLogMillis = now;
+      LOG.info(
+          "No peers available, waiting to start snap/2 world state download "
+              + "(retrying every {} ms)",
+          NO_PEER_RETRY_DELAY_MILLISECONDS);
+    }
   }
 }

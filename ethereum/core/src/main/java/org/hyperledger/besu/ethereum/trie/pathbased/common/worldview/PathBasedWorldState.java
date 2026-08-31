@@ -22,14 +22,17 @@ import static org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBa
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.StorageSlotKey;
+import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessListOverlay;
+import org.hyperledger.besu.ethereum.mainnet.staterootcommitter.DefaultStateRootCommitter;
+import org.hyperledger.besu.ethereum.mainnet.staterootcommitter.TrieDisabledStateRootCommitter;
 import org.hyperledger.besu.ethereum.trie.common.StateRootMismatchException;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.StorageSubscriber;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.cache.PathBasedCachedWorldStorageManager;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedLayeredWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedSnapshotWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedWorldStateKeyValueStorage;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.StorageSubscriber;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.trielog.TrieLogManager;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.accumulator.PathBasedWorldStateUpdateAccumulator;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.cache.PathBasedWorldStateCacheManager;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.plugin.data.BlockHeader;
 import org.hyperledger.besu.plugin.services.exception.StorageException;
@@ -39,6 +42,7 @@ import org.hyperledger.besu.plugin.services.storage.SegmentedKeyValueStorageTran
 import org.hyperledger.besu.plugin.services.storage.WorldStateKeyValueStorage;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
 import org.hyperledger.besu.plugin.services.worldstate.StateRootCommitter;
+import org.hyperledger.besu.plugin.services.worldstate.StateRootComputation;
 
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -55,8 +59,23 @@ public abstract class PathBasedWorldState
 
   private static final Logger LOG = LoggerFactory.getLogger(PathBasedWorldState.class);
 
+  protected static final DefaultStateRootCommitter DEFAULT_STATE_ROOT_COMMITTER =
+      new DefaultStateRootCommitter();
+
+  /**
+   * Resolves the committer used by the no-arg {@link #persist(BlockHeader)} and the frozen {@link
+   * #rootHash()} / {@link #frontierRootHash()} recomputes. In flat (trie-disabled) mode the
+   * dedicated {@link TrieDisabledStateRootCommitter} collects flat writes without touching any
+   * trie; otherwise the default trie-based committer is used.
+   */
+  protected StateRootCommitter resolveDefaultCommitter() {
+    return isTrieDisabled()
+        ? TrieDisabledStateRootCommitter.INSTANCE
+        : DEFAULT_STATE_ROOT_COMMITTER;
+  }
+
   protected PathBasedWorldStateKeyValueStorage worldStateKeyValueStorage;
-  protected final PathBasedCachedWorldStorageManager cachedWorldStorageManager;
+  protected final PathBasedWorldStateCacheManager worldStateCacheManager;
   protected final TrieLogManager trieLogManager;
   protected PathBasedWorldStateUpdateAccumulator<?> accumulator;
 
@@ -78,7 +97,7 @@ public abstract class PathBasedWorldState
 
   protected PathBasedWorldState(
       final PathBasedWorldStateKeyValueStorage worldStateKeyValueStorage,
-      final PathBasedCachedWorldStorageManager cachedWorldStorageManager,
+      final PathBasedWorldStateCacheManager worldStateCacheManager,
       final TrieLogManager trieLogManager,
       final WorldStateConfig worldStateConfig) {
     this.worldStateKeyValueStorage = worldStateKeyValueStorage;
@@ -89,17 +108,18 @@ public abstract class PathBasedWorldState
                     .getWorldStateRootHash()
                     .orElse(getEmptyTrieHash().getBytes())));
     this.worldStateBlockHash = worldStateKeyValueStorage.getWorldStateBlockHash().orElse(Hash.ZERO);
-    this.cachedWorldStorageManager = cachedWorldStorageManager;
+    this.worldStateCacheManager = worldStateCacheManager;
     this.trieLogManager = trieLogManager;
     this.worldStateConfig = worldStateConfig;
     this.isStorageFrozen = false;
   }
 
   /**
-   * Having a protected method to override the accumulator solves the chicken-egg problem of needing
-   * a worldstate reference (this) when constructing the Accumulator.
+   * Sets the updater strategy for this world state. Called once during construction to solve the
+   * chicken-and-egg problem of needing a world-state reference ({@code this}) when constructing the
+   * updater.
    *
-   * @param accumulator accumulator to use.
+   * @param accumulator the updater to use (either an accumulator or a BAL-backed updater)
    */
   public void setAccumulator(final PathBasedWorldStateUpdateAccumulator<?> accumulator) {
     this.accumulator = accumulator;
@@ -141,6 +161,7 @@ public abstract class PathBasedWorldState
     return !(worldStateKeyValueStorage instanceof PathBasedSnapshotWorldStateKeyValueStorage);
   }
 
+  @Override
   public boolean isStorageFrozen() {
     return isStorageFrozen;
   }
@@ -164,10 +185,19 @@ public abstract class PathBasedWorldState
     return accumulator;
   }
 
+  public boolean isTrieDisabled() {
+    return worldStateConfig.isTrieDisabled();
+  }
+
   @Override
   public MutableWorldState disableTrie() {
     this.worldStateConfig.setTrieDisabled(true);
     return this;
+  }
+
+  @Override
+  public void persist(final BlockHeader blockHeader) {
+    persist(blockHeader, resolveDefaultCommitter());
   }
 
   @Override
@@ -185,9 +215,11 @@ public abstract class PathBasedWorldState
     Runnable cacheWorldState = () -> {};
 
     try {
-      final Hash calculatedRootHash =
-          committer.computeRoot(
-              buildStateRootSupplier(stateUpdater, blockHeader), this, stateUpdater, blockHeader);
+      final StateRootComputation computation = committer.compute(this, blockHeader, accumulator);
+      if (!isStorageFrozen()) {
+        computation.applyTo(stateUpdater);
+      }
+      final Hash calculatedRootHash = computation.root();
 
       if (blockHeader != null) {
         verifyWorldStateRoot(calculatedRootHash, blockHeader);
@@ -196,7 +228,7 @@ public abstract class PathBasedWorldState
               trieLogManager.saveTrieLog(accumulator, calculatedRootHash, blockHeader, this);
             };
         cacheWorldState =
-            () -> cachedWorldStorageManager.addCachedLayer(blockHeader, calculatedRootHash, this);
+            () -> worldStateCacheManager.addCachedLayer(blockHeader, calculatedRootHash, this);
         stateUpdater
             .getWorldStateTransaction()
             .put(
@@ -243,31 +275,6 @@ public abstract class PathBasedWorldState
     }
   }
 
-  /**
-   * Builds a lazy supplier that, when invoked, applies all accumulated state changes to the trie
-   * and returns the resulting state root hash. This supplier is passed to the {@link
-   * StateRootCommitter}, which may invoke it (sync / BAL-verification) or skip it entirely
-   * (BAL-trusted mode).
-   */
-  private java.util.function.Supplier<Hash> buildStateRootSupplier(
-      final PathBasedWorldStateKeyValueStorage.Updater stateUpdater,
-      final BlockHeader blockHeader) {
-    final Optional<PathBasedWorldStateKeyValueStorage.Updater> updaterForTrie =
-        isStorageFrozen ? Optional.empty() : Optional.of(stateUpdater);
-
-    return () -> {
-      if (blockHeader != null && worldStateConfig.isTrieDisabled()) {
-        LOG.atDebug()
-            .setMessage("Unsafe state root verification for block header {}")
-            .addArgument(blockHeader)
-            .log();
-        calculateRootHash(updaterForTrie, accumulator);
-        return blockHeader.getStateRoot();
-      }
-      return calculateRootHash(updaterForTrie, accumulator);
-    };
-  }
-
   protected void verifyWorldStateRoot(final Hash calculatedStateRoot, final BlockHeader header) {
     if (!worldStateConfig.isTrieDisabled() && !calculatedStateRoot.equals(header.getStateRoot())) {
       throw new StateRootMismatchException(header.getStateRoot(), calculatedStateRoot);
@@ -277,15 +284,6 @@ public abstract class PathBasedWorldState
   @Override
   public PathBasedWorldStateUpdateAccumulator<?> updater() {
     return accumulator;
-  }
-
-  @Override
-  public Hash rootHash() {
-    if (isStorageFrozen && accumulator.isAccumulatorStateChanged()) {
-      worldStateRootHash = calculateRootHash(Optional.empty(), accumulator.copy());
-      accumulator.resetAccumulatorStateChanged();
-    }
-    return worldStateRootHash;
   }
 
   protected static final KeyValueStorageTransaction noOpTx =
@@ -388,7 +386,18 @@ public abstract class PathBasedWorldState
   }
 
   @Override
-  public abstract Hash frontierRootHash();
+  public Hash frontierRootHash() {
+    return resolveDefaultCommitter().compute(this, null, accumulator.copy()).root();
+  }
+
+  @Override
+  public Hash rootHash() {
+    if (isStorageFrozen && accumulator.isAccumulatorStateChanged()) {
+      worldStateRootHash = resolveDefaultCommitter().compute(this, null, accumulator.copy()).root();
+      accumulator.resetAccumulatorStateChanged();
+    }
+    return worldStateRootHash;
+  }
 
   /**
    * Configures the current world state to operate in "frozen" mode.
@@ -419,9 +428,14 @@ public abstract class PathBasedWorldState
   @Override
   public abstract Optional<Bytes> getCode(@NotNull final Address address, final Hash codeHash);
 
-  public abstract Hash calculateRootHash(
-      final Optional<PathBasedWorldStateKeyValueStorage.Updater> maybeStateUpdater,
-      final PathBasedWorldStateUpdateAccumulator<?> worldStateUpdater);
+  /**
+   * Attaches a Block Access List overlay to this world state, replacing its accumulator with a
+   * BAL-aware one. Must be called after the world state has been resolved (and rolled) to the
+   * target block, so that overlay values never interfere with trie-log replay.
+   *
+   * @param blockAccessListOverlay the overlay to attach
+   */
+  public abstract void applyBlockAccessListOverlay(BlockAccessListOverlay blockAccessListOverlay);
 
   protected abstract Hash getEmptyTrieHash();
 }

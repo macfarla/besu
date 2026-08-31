@@ -170,6 +170,7 @@ public class SnapWorldStateDownloader implements WorldStateDownloader {
               clock,
               ethContext,
               syncDurationMetrics);
+      this.downloadState.set(newDownloadState);
 
       final Map<Bytes32, Bytes32> ranges = RangeManager.generateAllRanges(16);
       snapsyncMetricsManager.initRange(ranges);
@@ -219,7 +220,8 @@ public class SnapWorldStateDownloader implements WorldStateDownloader {
               ethContext,
               fastSyncActions,
               snapSyncState,
-              fastSyncActions.getChainDownloaderListener());
+              fastSyncActions.getChainDownloaderListener(),
+              snapSyncConfiguration.getPivotBlockCheckIntervalMillis());
 
       SnapWorldStateDownloadProcess downloadProcess =
           SnapWorldStateDownloadProcess.builder()

@@ -55,7 +55,6 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthGetUncleByB
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthGetUncleCountByBlockHash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthGetUncleCountByBlockNumber;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthMaxPriorityFeePerGas;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthMining;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthNewBlockFilter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthNewFilter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.EthNewPendingTransactionFilter;
@@ -158,7 +157,7 @@ public class EthJsonRpcMethods extends ApiGroupJsonRpcMethods {
             new EthGetUncleByBlockHashAndIndex(blockchainQueries),
             new EthNewBlockFilter(filterManager),
             new EthNewPendingTransactionFilter(filterManager),
-            new EthNewFilter(filterManager),
+            new EthNewFilter(filterManager, blockchainQueries, apiConfiguration.getMaxLogsRange()),
             new EthGetTransactionByHash(blockchainQueries, transactionPool),
             new EthGetTransactionByBlockHashAndIndex(blockchainQueries),
             new EthGetTransactionByBlockNumberAndIndex(blockchainQueries),
@@ -175,7 +174,6 @@ public class EthJsonRpcMethods extends ApiGroupJsonRpcMethods {
             new EthSendTransaction(),
             new EthEstimateGas(blockchainQueries, transactionSimulator, apiConfiguration),
             new EthCreateAccessList(blockchainQueries, transactionSimulator),
-            new EthMining(miningCoordinator),
             new EthCapabilities(blockchainQueries),
             new EthConfig(blockchainQueries, protocolSchedule, genesisConfigOptions),
             new EthProtocolVersion(supportedCapabilities),

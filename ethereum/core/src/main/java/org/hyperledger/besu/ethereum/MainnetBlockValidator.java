@@ -206,6 +206,8 @@ public class MainnetBlockValidator implements BlockValidator {
         return result;
       }
 
+      context.getWorldStateArchive().prepareWorldStateForBlock(block.getHeader(), worldState);
+
       var result = processBlock(context, worldState, block, blockAccessList);
       if (result.isFailed()) {
         handleFailedBlockProcessing(block, blockAccessList, result, shouldRecordBadBlock, context);
@@ -244,7 +246,14 @@ public class MainnetBlockValidator implements BlockValidator {
             result.getNbParallelizedTransactions());
       }
     } catch (MerkleTrieException ex) {
-      context.getWorldStateArchive().heal(ex.getMaybeAddress(), ex.getLocation());
+      LOG.debug(
+          "Merkle trie exception while processing block {}: message={}, address={}, location={}, hash={}",
+          block.toLogString(),
+          ex.getMessage(),
+          ex.getMaybeAddress(),
+          ex.getLocation(),
+          ex.getHash(),
+          ex);
       return new BlockProcessingResult(Optional.empty(), ex);
     } catch (StorageException ex) {
       var retval = new BlockProcessingResult(Optional.empty(), ex);
@@ -292,8 +301,8 @@ public class MainnetBlockValidator implements BlockValidator {
         String description = result.errorMessage.orElse("Unknown cause");
         final BadBlockCause cause = BadBlockCause.fromValidationFailure(description);
         final Optional<BlockAccessList> generatedBlockAccessList =
-            result instanceof BlockProcessingResult
-                ? ((BlockProcessingResult) result).getGeneratedBlockAccessList()
+            result instanceof BlockProcessingResult blockProcessingResult
+                ? blockProcessingResult.getGeneratedBlockAccessList()
                 : Optional.empty();
         context
             .getBadBlockManager()

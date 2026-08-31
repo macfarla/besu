@@ -43,8 +43,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
@@ -53,22 +53,26 @@ import org.apache.tuweni.bytes.Bytes32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Snap/2 account range data request. Commits all trie nodes including incomplete ones. */
+/** snap/2 account range data request. Commits all trie nodes including incomplete ones. */
 public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
 
   private static final Logger LOG = LoggerFactory.getLogger(SnapV2AccountRangeRequest.class);
 
+  private static final long EMPTY_LOG_INTERVAL_MS = 30_000L;
+  private static final AtomicLong emptyResponseCount = new AtomicLong();
+  private static final AtomicLong lastEmptyLogMillis = new AtomicLong();
+
   private final Bytes32 startKeyHash;
   private final Bytes32 endKeyHash;
   private final StackTrie stackTrie;
-  private Optional<Boolean> isProofValid;
+  private ResponseProofStatus responseProofStatus;
 
   public SnapV2AccountRangeRequest(
       final BlockHeader pivotBlockHeader, final Bytes32 startKeyHash, final Bytes32 endKeyHash) {
     super(ACCOUNT_RANGE, pivotBlockHeader, startKeyHash);
     this.startKeyHash = startKeyHash;
     this.endKeyHash = endKeyHash;
-    this.isProofValid = Optional.empty();
+    this.responseProofStatus = ResponseProofStatus.PENDING;
     this.stackTrie = new StackTrie(pivotBlockHeader.getStateRoot(), startKeyHash);
   }
 
@@ -83,9 +87,6 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
     final AtomicInteger nbNodesSaved = new AtomicInteger();
     final NodeUpdater nodeUpdater =
         (location, hash, value) -> {
-          if (location.isEmpty()) {
-            downloadState.setRootNodeData(value);
-          }
           applyForStrategy(
               updater,
               onBonsai -> onBonsai.putAccountStateTrieNode(location, hash, value),
@@ -117,10 +118,10 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
     if (!accounts.isEmpty() || !proofs.isEmpty()) {
       if (!worldStateProofProvider.isValidRangeProof(
           startKeyHash, endKeyHash, Bytes32.wrap(getRootHash().getBytes()), proofs, accounts)) {
-        isProofValid = Optional.of(false);
+        responseProofStatus = ResponseProofStatus.INVALID;
       } else {
         stackTrie.addElement(startKeyHash, proofs, accounts);
-        isProofValid = Optional.of(true);
+        responseProofStatus = ResponseProofStatus.VALID;
         LOG.atDebug()
             .setMessage("{} accounts received during sync for account range {} {}")
             .addArgument(accounts.size())
@@ -128,12 +129,32 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
             .addArgument(endKeyHash)
             .log();
       }
+    } else {
+      logEmptyResponse();
+    }
+  }
+
+  private static void logEmptyResponse() {
+    emptyResponseCount.incrementAndGet();
+    final long now = System.currentTimeMillis();
+    final long last = lastEmptyLogMillis.get();
+    if (now - last >= EMPTY_LOG_INTERVAL_MS && lastEmptyLogMillis.compareAndSet(last, now)) {
+      final long loggedCount = emptyResponseCount.getAndSet(0);
+      LOG.warn(
+          "snap/2 received {} empty account range response(s) in the last {}s. "
+              + "Peer may not have state at this pivot or be malicious. ",
+          loggedCount,
+          EMPTY_LOG_INTERVAL_MS / 1000);
     }
   }
 
   @Override
   public boolean isResponseReceived() {
-    return isProofValid.orElse(false);
+    return responseProofStatus == ResponseProofStatus.VALID;
+  }
+
+  public boolean hasInvalidProof() {
+    return responseProofStatus == ResponseProofStatus.INVALID;
   }
 
   @Override
@@ -141,6 +162,10 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
       final SnapRequestContext downloadState,
       final WorldStateStorageCoordinator worldStateStorageCoordinator,
       final SnapSyncProcessState snapSyncState) {
+    if (responseProofStatus != ResponseProofStatus.VALID) {
+      return Stream.empty();
+    }
+
     final List<SnapDataRequest> childRequests = new ArrayList<>();
     final StackTrie.TaskElement taskElement = stackTrie.getElement(startKeyHash);
 
@@ -148,6 +173,7 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
             Bytes32.wrap(getRootHash().getBytes()),
             taskElement.proofs(),
             taskElement.keys(),
+            startKeyHash,
             endKeyHash)
         .ifPresentOrElse(
             missingRightElement -> {
@@ -165,7 +191,10 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
                     .notifyRangeProgress(
                         SnapSyncMetricsManager.Step.DOWNLOAD, endKeyHash, endKeyHash));
 
-    for (Map.Entry<Bytes32, Bytes> account : taskElement.keys().entrySet()) {
+    // Peer responses include boundary accounts outside [startKeyHash, endKeyHash] required for
+    // proof verification; only generate children for in-range accounts.
+    for (Map.Entry<Bytes32, Bytes> account :
+        taskElement.keys().subMap(startKeyHash, true, endKeyHash, true).entrySet()) {
       final PmtStateTrieAccountValue accountValue =
           PmtStateTrieAccountValue.readFrom(RLP.input(account.getValue()));
       if (!accountValue.getStorageRoot().equals(Hash.EMPTY_TRIE_HASH)) {
@@ -209,6 +238,6 @@ public class SnapV2AccountRangeRequest extends SnapV2DataRequest {
   @Override
   public void clear() {
     stackTrie.clear();
-    isProofValid = Optional.of(false);
+    responseProofStatus = ResponseProofStatus.PENDING;
   }
 }

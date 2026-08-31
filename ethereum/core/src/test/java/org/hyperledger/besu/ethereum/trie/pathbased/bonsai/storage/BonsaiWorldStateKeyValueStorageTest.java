@@ -16,6 +16,7 @@ package org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier.ACCOUNT_INFO_STATE;
+import static org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier.ACCOUNT_STORAGE_STORAGE;
 import static org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier.TRIE_BRANCH_STORAGE;
 import static org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedWorldStateKeyValueStorage.WORLD_BLOCK_NUMBER_KEY;
 import static org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedWorldStateKeyValueStorage.WORLD_ROOT_HASH_KEY;
@@ -40,10 +41,10 @@ import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier;
 import org.hyperledger.besu.ethereum.trie.MerkleTrie;
 import org.hyperledger.besu.ethereum.trie.StorageEntriesCollector;
 import org.hyperledger.besu.ethereum.trie.common.PmtStateTrieAccountValue;
-import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.BonsaiAccount;
-import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.cache.CodeCache;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.account.BonsaiAccount;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.flat.BonsaiFullFlatDbStrategy;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.StorageSubscriber;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.code.PathBasedCodeCache;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.StorageSubscriber;
 import org.hyperledger.besu.ethereum.trie.patricia.StoredMerklePatriciaTrie;
 import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.FlatDbMode;
@@ -104,8 +105,7 @@ public class BonsaiWorldStateKeyValueStorageTest {
       storage = emptyStorage(useCodeHashStorage);
       storage.upgradeToFullFlatDbMode();
     } else if (flatDbMode.equals(FlatDbMode.PARTIAL)) {
-      storage = emptyStorage(useCodeHashStorage);
-      storage.downgradeToPartialFlatDbMode();
+      storage = emptyPartialStorage(useCodeHashStorage);
     }
     return storage;
   }
@@ -267,10 +267,10 @@ public class BonsaiWorldStateKeyValueStorageTest {
         .put(TRIE_BRANCH_STORAGE, WORLD_ROOT_HASH_KEY, trie.getRootHash().toArrayUnsafe());
     updater.commit();
 
-    // remove flat database
-    storage.downgradeToPartialFlatDbMode();
-    storage.clearFlatDatabase();
-    storage.upgradeToFullFlatDbMode();
+    // remove flat database. In FULL mode resetOnResync is a no-op, so clear the flat
+    // segments directly to simulate a post-sync state where only trie branches remain.
+    storage.getComposedWorldStateStorage().clear(ACCOUNT_INFO_STATE);
+    storage.getComposedWorldStateStorage().clear(ACCOUNT_STORAGE_STORAGE);
 
     Mockito.reset(storage);
 
@@ -309,40 +309,6 @@ public class BonsaiWorldStateKeyValueStorageTest {
         .contains(accounts.firstEntry().getValue());
 
     verify(storage, times(1)).getAccountStateTrieNode(any(), eq(trie.getRootHash()));
-  }
-
-  @ParameterizedTest
-  @MethodSource("flatDbMode")
-  void shouldUsePartialDBStrategyAfterDowngradingMode(final FlatDbMode flatDbMode) {
-    Assumptions.assumeTrue(flatDbMode == FlatDbMode.PARTIAL);
-    final BonsaiWorldStateKeyValueStorage storage = spy(setUp(flatDbMode));
-    final WorldStateStorageCoordinator coordinator = new WorldStateStorageCoordinator(storage);
-    final MerkleTrie<Bytes, Bytes> trie = TrieGenerator.generateTrie(coordinator, 1);
-    final TreeMap<Bytes32, Bytes> accounts =
-        (TreeMap<Bytes32, Bytes>)
-            trie.entriesFrom(
-                root ->
-                    StorageEntriesCollector.collectEntries(
-                        root, Bytes32.wrap(Hash.ZERO.getBytes()), 1));
-
-    // save world state root hash
-    final BonsaiWorldStateKeyValueStorage.Updater updater = storage.updater();
-    updater
-        .getWorldStateTransaction()
-        .put(TRIE_BRANCH_STORAGE, WORLD_ROOT_HASH_KEY, trie.getRootHash().toArrayUnsafe());
-    updater.commit();
-
-    Mockito.reset(storage);
-
-    // remove flat database
-    storage.clearFlatDatabase();
-
-    storage.upgradeToFullFlatDbMode();
-    assertThat(storage.getAccount(Hash.wrap(accounts.firstKey()))).isEmpty();
-
-    storage.downgradeToPartialFlatDbMode();
-    assertThat(storage.getAccount(Hash.wrap(accounts.firstKey())))
-        .contains(accounts.firstEntry().getValue());
   }
 
   @ParameterizedTest
@@ -478,7 +444,11 @@ public class BonsaiWorldStateKeyValueStorageTest {
 
     BonsaiAccount retrievedAccount =
         BonsaiAccount.fromRLP(
-            null, account, storage.getAccount(account.addressHash()).get(), false, new CodeCache());
+            null,
+            account,
+            storage.getAccount(account.addressHash()).get(),
+            false,
+            new PathBasedCodeCache());
     assertThat(retrievedAccount.getBalance())
         .isEqualTo(
             Wei.fromHexString(
@@ -961,6 +931,24 @@ public class BonsaiWorldStateKeyValueStorageTest {
                     .maxLayersToLoad(DEFAULT_MAX_LAYERS_TO_LOAD)
                     .unstable(
                         ImmutablePathBasedExtraStorageConfiguration.PathBasedUnstable.builder()
+                            .codeStoredByCodeHashEnabled(useCodeHashStorage)
+                            .build())
+                    .build())
+            .build());
+  }
+
+  private BonsaiWorldStateKeyValueStorage emptyPartialStorage(final boolean useCodeHashStorage) {
+    return new BonsaiWorldStateKeyValueStorage(
+        new InMemoryKeyValueStorageProvider(),
+        new NoOpMetricsSystem(),
+        ImmutableDataStorageConfiguration.builder()
+            .dataStorageFormat(DataStorageFormat.BONSAI)
+            .pathBasedExtraStorageConfiguration(
+                ImmutablePathBasedExtraStorageConfiguration.builder()
+                    .maxLayersToLoad(DEFAULT_MAX_LAYERS_TO_LOAD)
+                    .unstable(
+                        ImmutablePathBasedExtraStorageConfiguration.PathBasedUnstable.builder()
+                            .fullFlatDbEnabled(false)
                             .codeStoredByCodeHashEnabled(useCodeHashStorage)
                             .build())
                     .build())

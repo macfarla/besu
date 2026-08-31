@@ -420,6 +420,73 @@ public record UInt256(long u3, long u2, long u1, long u0) {
     return new UInt256(z3, z2, z1, z0);
   }
 
+  /**
+   * Multi-limb right-shift; used by the power-of-two fast path in {@link #div(UInt256)}.
+   *
+   * @param n number of bits to shift right; caller guarantees {@code 1 <= n < 256}.
+   * @return {@code this >> n}.
+   */
+  private UInt256 shiftRightWide(final int n) {
+    final int limbShift = n >>> 6;
+    final int bitShift = n & 63;
+    long s0, s1, s2, s3;
+    switch (limbShift) {
+      case 0 -> {
+        s0 = u0;
+        s1 = u1;
+        s2 = u2;
+        s3 = u3;
+      }
+      case 1 -> {
+        s0 = u1;
+        s1 = u2;
+        s2 = u3;
+        s3 = 0;
+      }
+      case 2 -> {
+        s0 = u2;
+        s1 = u3;
+        s2 = 0;
+        s3 = 0;
+      }
+      case 3 -> {
+        s0 = u3;
+        s1 = 0;
+        s2 = 0;
+        s3 = 0;
+      }
+      default -> {
+        return ZERO;
+      }
+    }
+    if (bitShift == 0) return new UInt256(s3, s2, s1, s0);
+    final int inv = 64 - bitShift;
+    return new UInt256(
+        s3 >>> bitShift,
+        (s2 >>> bitShift) | (s3 << inv),
+        (s1 >>> bitShift) | (s2 << inv),
+        (s0 >>> bitShift) | (s1 << inv));
+  }
+
+  /**
+   * Keep the low {@code n} bits, zero the rest; used by the power-of-two modulus fast path in
+   * {@link #addMod(UInt256, UInt256)} and {@link #mulMod(UInt256, UInt256)} where mod-by-2^n is a
+   * bitmask.
+   *
+   * @param n number of low bits to keep; caller guarantees {@code 1 <= n < 256}.
+   * @return {@code this & ((1 << n) - 1)}.
+   */
+  private UInt256 maskLow(final int n) {
+    final int limbsKept = n >>> 6;
+    final int bitsInTop = n & 63;
+    final long topMask = bitsInTop == 0 ? 0L : (1L << bitsInTop) - 1L;
+    final long m0 = limbsKept > 0 ? u0 : (u0 & topMask);
+    final long m1 = limbsKept > 1 ? u1 : (limbsKept == 1 ? (u1 & topMask) : 0L);
+    final long m2 = limbsKept > 2 ? u2 : (limbsKept == 2 ? (u2 & topMask) : 0L);
+    final long m3 = limbsKept == 3 ? (u3 & topMask) : 0L;
+    return new UInt256(m3, m2, m1, m0);
+  }
+
   // --------------------------------------------------------------------------
   // endregion
 
@@ -557,10 +624,30 @@ public record UInt256(long u3, long u2, long u1, long u0) {
    */
   public UInt256 div(final UInt256 divisor) {
     if (isZero()) return ZERO;
-    if (divisor.u3 != 0) return divisor.divReduce(this);
-    if (divisor.u2 != 0) return divisor.asUInt192().divReduce(this);
-    if (divisor.u1 != 0) return divisor.asUInt128().divReduce(this);
+    // Fast path: when the divisor is a power of two:
+    // x / 2^N == x >> N
+    if (divisor.u3 != 0) {
+      if ((divisor.u3 & (divisor.u3 - 1)) == 0 && (divisor.u2 | divisor.u1 | divisor.u0) == 0) {
+        return shiftRightWide(192 + Long.numberOfTrailingZeros(divisor.u3));
+      }
+      return divisor.divReduce(this);
+    }
+    if (divisor.u2 != 0) {
+      if ((divisor.u2 & (divisor.u2 - 1)) == 0 && (divisor.u1 | divisor.u0) == 0) {
+        return shiftRightWide(128 + Long.numberOfTrailingZeros(divisor.u2));
+      }
+      return divisor.asUInt192().divReduce(this);
+    }
+    if (divisor.u1 != 0) {
+      if ((divisor.u1 & (divisor.u1 - 1)) == 0 && divisor.u0 == 0) {
+        return shiftRightWide(64 + Long.numberOfTrailingZeros(divisor.u1));
+      }
+      return divisor.asUInt128().divReduce(this);
+    }
     if ((divisor.u0 == 0) || (divisor.u0 == 1)) return (divisor.u0 == 1) ? this : ZERO;
+    if ((divisor.u0 & (divisor.u0 - 1)) == 0) {
+      return shiftRightWide(Long.numberOfTrailingZeros(divisor.u0));
+    }
     return divisor.asUInt64().divReduce(this);
   }
 
@@ -593,9 +680,30 @@ public record UInt256(long u3, long u2, long u1, long u0) {
     if (isZero()) return other.mod(modulus);
     if (other.isZero()) return this.mod(modulus);
     if (modulus.isZeroOrOne()) return ZERO;
-    if (modulus.u3 != 0) return modulus.sum(this, other);
-    if (modulus.u2 != 0) return modulus.asUInt192().sum(this, other);
-    if (modulus.u1 != 0) return modulus.asUInt128().sum(this, other);
+
+    // Fast path: when the modulus is a power of two:
+    // x mod 2^N == x & (2^N - 1)
+    if (modulus.u3 != 0) {
+      if ((modulus.u3 & (modulus.u3 - 1)) == 0 && (modulus.u2 | modulus.u1 | modulus.u0) == 0) {
+        return add(other).maskLow(192 + Long.numberOfTrailingZeros(modulus.u3));
+      }
+      return modulus.sum(this, other);
+    }
+    if (modulus.u2 != 0) {
+      if ((modulus.u2 & (modulus.u2 - 1)) == 0 && (modulus.u1 | modulus.u0) == 0) {
+        return add(other).maskLow(128 + Long.numberOfTrailingZeros(modulus.u2));
+      }
+      return modulus.asUInt192().sum(this, other);
+    }
+    if (modulus.u1 != 0) {
+      if ((modulus.u1 & (modulus.u1 - 1)) == 0 && modulus.u0 == 0) {
+        return add(other).maskLow(64 + Long.numberOfTrailingZeros(modulus.u1));
+      }
+      return modulus.asUInt128().sum(this, other);
+    }
+    if ((modulus.u0 & (modulus.u0 - 1)) == 0) {
+      return add(other).maskLow(Long.numberOfTrailingZeros(modulus.u0));
+    }
     return modulus.asUInt64().sum(this, other);
   }
 
@@ -610,9 +718,30 @@ public record UInt256(long u3, long u2, long u1, long u0) {
     if (this.isZero() || other.isZero() || modulus.isZeroOrOne()) return ZERO;
     if (this.isOne()) return other.mod(modulus);
     if (other.isOne()) return this.mod(modulus);
-    if (modulus.u3 != 0) return modulus.mul(this, other);
-    if (modulus.u2 != 0) return modulus.asUInt192().mul(this, other);
-    if (modulus.u1 != 0) return modulus.asUInt128().mul(this, other);
+
+    // Fast path: when the modulus is a power of two:
+    // (a * b) mod 2^N == (a * b) & (2^N - 1)
+    if (modulus.u3 != 0) {
+      if ((modulus.u3 & (modulus.u3 - 1)) == 0 && (modulus.u2 | modulus.u1 | modulus.u0) == 0) {
+        return mul(other).maskLow(192 + Long.numberOfTrailingZeros(modulus.u3));
+      }
+      return modulus.mul(this, other);
+    }
+    if (modulus.u2 != 0) {
+      if ((modulus.u2 & (modulus.u2 - 1)) == 0 && (modulus.u1 | modulus.u0) == 0) {
+        return mul(other).maskLow(128 + Long.numberOfTrailingZeros(modulus.u2));
+      }
+      return modulus.asUInt192().mul(this, other);
+    }
+    if (modulus.u1 != 0) {
+      if ((modulus.u1 & (modulus.u1 - 1)) == 0 && modulus.u0 == 0) {
+        return mul(other).maskLow(64 + Long.numberOfTrailingZeros(modulus.u1));
+      }
+      return modulus.asUInt128().mul(this, other);
+    }
+    if ((modulus.u0 & (modulus.u0 - 1)) == 0) {
+      return mul(other).maskLow(Long.numberOfTrailingZeros(modulus.u0));
+    }
     return modulus.asUInt64().mul(this, other);
   }
 

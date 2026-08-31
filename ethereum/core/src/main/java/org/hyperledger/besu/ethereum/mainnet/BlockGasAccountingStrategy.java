@@ -39,23 +39,27 @@ public interface BlockGasAccountingStrategy {
   long calculateTransactionRegularGas(Transaction transaction, TransactionProcessingResult result);
 
   /**
-   * Check whether the block has capacity for a transaction with the given gas limit. For 1D gas
-   * (pre-EIP-8037), this checks regular gas only. For 2D gas (EIP-8037), the tx gas limit must fit
-   * within the remaining capacity of each dimension independently, since gas_metered =
-   * max(cumulative_regular, cumulative_state) must stay within the block gas limit.
+   * Check whether the block has capacity for a transaction. The default (1D, pre-EIP-8037)
+   * implementation checks the regular gas dimension only: the tx gas limit must fit within the
+   * block's remaining regular-gas budget (capped at zero defensively). EIP-8037 strategies override
+   * this to bound both dimensions by the transaction's gas limit, since either one could consume
+   * the whole limit (regular gas additionally runtime-capped at {@code TX_MAX_GAS_LIMIT}).
    *
    * @param txGasLimit the gas limit of the candidate transaction
-   * @param cumulativeRegularGas cumulative regular gas used so far
-   * @param cumulativeStateGas cumulative state gas used so far
+   * @param txMaxGasLimit runtime cap on regular gas per tx (EIP-7825 TX_MAX_GAS_LIMIT)
+   * @param cumulativeRegularGas cumulative regular gas used in the block so far
+   * @param cumulativeStateGas cumulative state gas used in the block so far
    * @param blockGasLimit the block gas limit
    * @return true if the block has capacity for this transaction
    */
   default boolean hasBlockCapacity(
       final long txGasLimit,
+      final long txMaxGasLimit,
       final long cumulativeRegularGas,
       final long cumulativeStateGas,
       final long blockGasLimit) {
-    return txGasLimit <= blockGasLimit - cumulativeRegularGas;
+    final long remainingRegular = Math.max(0, blockGasLimit - cumulativeRegularGas);
+    return txGasLimit <= remainingRegular;
   }
 
   /**
@@ -91,22 +95,25 @@ public interface BlockGasAccountingStrategy {
         @Override
         public long calculateTransactionRegularGas(
             final Transaction transaction, final TransactionProcessingResult result) {
-          return result.getEstimateGasUsedByTransaction() - result.getStateGasUsed();
+          // EIP-8037: the calldata floor binds this dimension, so the sender cannot buy block
+          // regular-gas space below the floor by spending on state.
+          return result.getRegularGasUsedForBlock();
         }
 
         @Override
         public boolean hasBlockCapacity(
             final long txGasLimit,
+            final long txMaxGasLimit,
             final long cumulativeRegularGas,
             final long cumulativeStateGas,
             final long blockGasLimit) {
-          // EIP-8037: Only check regular gas dimension. State gas is validated at block level
-          // via effectiveGasUsed() = max(regular, state) after transaction execution.
-          // The tx gas limit is not an accurate proxy for state gas usage, so checking it
-          // against remaining state capacity would reject valid blocks where individual txs
-          // exceed the state gas budget but the block total is within limits.
-          final long remainingRegular = Math.max(0, blockGasLimit - cumulativeRegularGas);
-          return txGasLimit <= remainingRegular;
+          // The full tx gas limit bounds both dimensions, since either one could consume the
+          // whole limit. Regular gas is additionally capped at TX_MAX_GAS_LIMIT (EIP-7825).
+          final long regularAvailable = Math.max(0L, blockGasLimit - cumulativeRegularGas);
+          final long stateAvailable = Math.max(0L, blockGasLimit - cumulativeStateGas);
+          final long worstCaseRegular = Math.min(txMaxGasLimit, txGasLimit);
+          final long worstCaseState = txGasLimit;
+          return worstCaseRegular <= regularAvailable && worstCaseState <= stateAvailable;
         }
 
         @Override

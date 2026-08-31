@@ -19,10 +19,10 @@ import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.StorageSlotKey;
 import org.hyperledger.besu.datatypes.Wei;
+import org.hyperledger.besu.ethereum.mainnet.block.access.list.PartialBlockAccessView;
 import org.hyperledger.besu.ethereum.rlp.RLP;
 import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.PathBasedAccount;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.PathBasedValue;
+import org.hyperledger.besu.ethereum.trie.pathbased.common.account.PathBasedAccount;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.storage.PathBasedWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.PathBasedWorldState;
 import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.PathBasedWorldView;
@@ -47,7 +47,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
+import com.google.common.base.Suppliers;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 import org.apache.tuweni.units.bigints.UInt256;
@@ -126,6 +128,86 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
   public void importPriorStateFromSource(
       final PathBasedWorldStateUpdateAccumulator<ACCOUNT> source) {
     importFrom(source, ImportMode.INSERT);
+  }
+
+  public void importStateChangesFromPartialView(final PartialBlockAccessView partialView) {
+    importStateChangesFromPartialView(partialView, false);
+  }
+
+  /**
+   * Imports writes from a {@link PartialBlockAccessView} produced by parallel BAL execution.
+   * Account and storage changes are inserted directly as {@link PathBasedValue} entries so {@link
+   * #commit()} does not need to re-read prior values from the database.
+   *
+   * @param partialView partial access list for a single transaction
+   * @param clearEmptyAccounts when true, delete accounts that become empty after applying writes
+   */
+  public void importStateChangesFromPartialView(
+      final PartialBlockAccessView partialView, final boolean clearEmptyAccounts) {
+    for (final PartialBlockAccessView.AccountChanges accountChanges :
+        partialView.accountChanges()) {
+      final Address address = accountChanges.getAddress();
+      final boolean hasHeaderChange =
+          accountChanges.getPostBalance().isPresent()
+              || accountChanges.getNonceChange().isPresent()
+              || accountChanges.getNewCode().isPresent();
+      final boolean hasStorageChange = !accountChanges.getStorageChanges().isEmpty();
+
+      if (!hasHeaderChange && !hasStorageChange) {
+        continue;
+      }
+
+      MutableAccount accountValue = getOrCreate(address);
+
+      boolean shouldCheckForEmptyAccount = false;
+
+      if (accountChanges.getPostBalance().isPresent()) {
+        final Wei balance = accountChanges.getPostBalance().get();
+        accountValue.setBalance(balance);
+        shouldCheckForEmptyAccount = clearEmptyAccounts && balance.isZero();
+      }
+
+      if (accountChanges.getNonceChange().isPresent()) {
+        final long nonce = accountChanges.getNonceChange().get();
+        accountValue.setNonce(nonce);
+        shouldCheckForEmptyAccount |= clearEmptyAccounts && nonce == 0L;
+      }
+
+      if (accountChanges.getNewCode().isPresent()) {
+        final Bytes code = accountChanges.getNewCode().get();
+        accountValue.setCode(code);
+        shouldCheckForEmptyAccount |= clearEmptyAccounts && code.isEmpty();
+      }
+
+      if (hasStorageChange) {
+        final StorageConsumingMap<StorageSlotKey, PathBasedValue<UInt256>> pendingStorageUpdates =
+            storageToUpdate.computeIfAbsent(
+                address,
+                k ->
+                    new StorageConsumingMap<>(
+                        address, new ConcurrentHashMap<>(), storagePreloader));
+        for (final PartialBlockAccessView.SlotChange slotChange :
+            accountChanges.getStorageChanges()) {
+          final StorageSlotKey slotKey = slotChange.slot();
+          final UInt256 prior =
+              slotChange.previousValue() != null ? slotChange.previousValue() : UInt256.ZERO;
+          final UInt256 updated =
+              slotChange.newValue() != null ? slotChange.newValue() : UInt256.ZERO;
+
+          final PathBasedValue<UInt256> pendingValue = pendingStorageUpdates.get(slotKey);
+          if (pendingValue == null) {
+            pendingStorageUpdates.put(slotKey, new PathBasedValue<>(prior, updated));
+          } else {
+            pendingValue.setUpdated(updated);
+          }
+        }
+      }
+
+      if (shouldCheckForEmptyAccount && accountValue.isEmpty()) {
+        deleteAccount(address);
+      }
+    }
+    this.isAccumulatorStateChanged = true;
   }
 
   private enum ImportMode {
@@ -295,32 +377,56 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
     return loadAccount(address, PathBasedValue::getUpdated);
   }
 
-  protected ACCOUNT loadAccount(
+  protected Optional<ACCOUNT> loadAccountFromParentAccumulator(
+      final Address address, final Function<PathBasedValue<ACCOUNT>, ACCOUNT> accountFunction) {
+    if (wrappedWorldView() instanceof PathBasedWorldStateUpdateAccumulator<?> parentAccumulator) {
+      @SuppressWarnings("unchecked")
+      final PathBasedWorldStateUpdateAccumulator<ACCOUNT> parent =
+          (PathBasedWorldStateUpdateAccumulator<ACCOUNT>) parentAccumulator;
+      return Optional.of(parent.loadAccount(address, accountFunction));
+    }
+    return Optional.empty();
+  }
+
+  protected void onAccountValueLoaded(
+      final Address address, final PathBasedValue<ACCOUNT> accountValue) {}
+
+  protected void onCodeValueLoaded(final Address address, final PathBasedValue<Bytes> codeValue) {}
+
+  protected void onStorageValueLoaded(
+      final Address address,
+      final StorageSlotKey storageSlotKey,
+      final PathBasedValue<UInt256> storageValue) {}
+
+  public ACCOUNT loadAccount(
       final Address address, final Function<PathBasedValue<ACCOUNT>, ACCOUNT> accountFunction) {
     try {
       final PathBasedValue<ACCOUNT> pathBasedValue = accountsToUpdate.get(address);
       if (pathBasedValue == null) {
-        final Account account;
-        if (wrappedWorldView() instanceof PathBasedWorldStateUpdateAccumulator) {
-          final PathBasedWorldStateUpdateAccumulator<ACCOUNT> worldStateUpdateAccumulator =
-              (PathBasedWorldStateUpdateAccumulator<ACCOUNT>) wrappedWorldView();
-          account = worldStateUpdateAccumulator.loadAccount(address, accountFunction);
-        } else {
-          account = wrappedWorldView().get(address);
+        final Optional<ACCOUNT> fromParent =
+            loadAccountFromParentAccumulator(address, accountFunction);
+        if (fromParent.isPresent()) {
+          return fromParent.get();
         }
+        final Account account = wrappedWorldView().get(address);
         if (account instanceof PathBasedAccount pathBasedAccount) {
-          ACCOUNT mutableAccount = copyAccount((ACCOUNT) pathBasedAccount, this, true);
-          accountsToUpdate.put(
-              address, new PathBasedValue<>((ACCOUNT) pathBasedAccount, mutableAccount));
-          return mutableAccount;
-        } else {
-          // add the empty read in accountsToUpdate
+          final ACCOUNT updatedAccount = copyAccount((ACCOUNT) pathBasedAccount, this, true);
+          final PathBasedValue<ACCOUNT> accountValue =
+              new PathBasedValue<>((ACCOUNT) pathBasedAccount, updatedAccount);
+          onAccountValueLoaded(address, accountValue);
+          accountsToUpdate.put(address, accountValue);
+          return accountFunction.apply(accountValue);
+        }
+        final PathBasedValue<ACCOUNT> accountValue = new PathBasedValue<>(null, null);
+        onAccountValueLoaded(address, accountValue);
+        if (accountValue.getUpdated() == null) {
           accountsToUpdate.put(address, new PathBasedValue<>(null, null));
           return null;
         }
-      } else {
-        return accountFunction.apply(pathBasedValue);
+        accountsToUpdate.put(address, accountValue);
+        return accountFunction.apply(accountValue);
       }
+      return accountFunction.apply(pathBasedValue);
     } catch (MerkleTrieException e) {
       // need to throw to trigger the heal
       throw new MerkleTrieException(
@@ -505,15 +611,12 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
   public Optional<Bytes> getCode(final Address address, final Hash codeHash) {
     final PathBasedValue<Bytes> localCode = codeToUpdate.get(address);
     if (localCode == null) {
-      final Optional<Bytes> code = wrappedWorldView().getCode(address, codeHash);
-      if (code.isEmpty() && !codeHash.equals(Hash.EMPTY)) {
-        throw new MerkleTrieException(
-            "invalid account code",
-            Optional.of(address),
-            Bytes32.wrap(codeHash.getBytes()),
-            Bytes.EMPTY);
-      }
-      return code;
+      final Supplier<Bytes> loader =
+          Suppliers.memoize(() -> wrappedWorldView().getCode(address, codeHash).orElse(null));
+      final PathBasedValue<Bytes> codeValue = PathBasedValue.withLazy(loader, loader);
+      onCodeValueLoaded(address, codeValue);
+      codeToUpdate.put(address, codeValue);
+      return Optional.ofNullable(codeValue.getUpdated());
     } else {
       return Optional.ofNullable(localCode.getUpdated());
     }
@@ -538,18 +641,27 @@ public abstract class PathBasedWorldStateUpdateAccumulator<ACCOUNT extends PathB
       }
     }
     try {
-      final Optional<UInt256> valueUInt =
-          (wrappedWorldView() instanceof PathBasedWorldState worldState)
-              ? worldState.getStorageValueByStorageSlotKey(address, storageSlotKey)
-              : wrappedWorldView().getStorageValueByStorageSlotKey(address, storageSlotKey);
+      final Supplier<UInt256> loader =
+          Suppliers.memoize(
+              () ->
+                  (wrappedWorldView() instanceof PathBasedWorldState worldState)
+                      ? worldState
+                          .getStorageValueByStorageSlotKey(address, storageSlotKey)
+                          .orElse(null)
+                      : wrappedWorldView()
+                          .getStorageValueByStorageSlotKey(address, storageSlotKey)
+                          .orElse(null));
+      final PathBasedValue<UInt256> storageValue = PathBasedValue.withLazy(loader, loader);
+      onStorageValueLoaded(address, storageSlotKey, storageValue);
+
       storageToUpdate
           .computeIfAbsent(
               address,
               key ->
                   new StorageConsumingMap<>(address, new ConcurrentHashMap<>(), storagePreloader))
-          .put(
-              storageSlotKey, new PathBasedValue<>(valueUInt.orElse(null), valueUInt.orElse(null)));
-      return valueUInt;
+          .put(storageSlotKey, storageValue);
+
+      return Optional.ofNullable(storageValue.getUpdated());
     } catch (MerkleTrieException e) {
       // need to throw to trigger the heal
       throw new MerkleTrieException(

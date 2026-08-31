@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 
-/** Snap/2 bytecode data request. */
+/** snap/2 bytecode data request. */
 public class SnapV2BytecodeRequest extends SnapV2DataRequest {
 
   private final Bytes32 accountHash;
@@ -81,6 +81,10 @@ public class SnapV2BytecodeRequest extends SnapV2DataRequest {
 
   public Bytes32 getAccountHash() {
     return accountHash;
+  }
+
+  public SnapV2BytecodeRequest retarget(final BlockHeader newPivotBlockHeader) {
+    return new SnapV2BytecodeRequest(newPivotBlockHeader, accountHash, codeHash, getRangeStart());
   }
 
   public Bytes32 getCodeHash() {
