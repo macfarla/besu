@@ -121,7 +121,8 @@ public interface WithdrawalsValidator {
       if (withdrawalsRoot.isEmpty()) {
         return true; // pre-Shanghai block, no withdrawals root field
       }
-      // A block with a withdrawalsRoot in the header but no withdrawals field in the body is malformed.
+      // A block with a withdrawalsRoot in the header but no withdrawals field in the body is
+      // malformed.
       if (block.getBody().getWithdrawals().isEmpty()) {
         LOG.warn(
             "Invalid block: withdrawalsRoot present in header but withdrawals absent from body");
