@@ -1,11 +1,10 @@
 name: acceptance-tests-timing-reports-update
 
-# Runs on every merge to main. Grabs the per-runner acceptance test XML results from the just-merged
-# PR's latest successful CI run and consolidates them into a single 'acceptance-tests-timing-reports'
-# artifact on main. 
-# That artifact is the timing baseline that acceptance-tests.yml downloads on every PR to split 
-# tests across parallel runners by historical duration. The data is always one merge behind — a PR's
-# own results only feed the *next* PR's split.
+# Runs on every merge to main. Grabs the per-runner acceptance test XML results from the main branch
+# CI run and consolidates them into a single 'acceptance-tests-timing-reports' artifact on main.
+# That artifact is the timing baseline that acceptance-tests.yml downloads on every PR to split
+# tests across parallel runners by historical duration. The data is always one merge behind — a
+# merge's own results only feed the *next* PR's split.
 
 on:
   push:
@@ -17,23 +16,16 @@ jobs:
     if: github.repository == 'besu-eth/besu'
     runs-on: ubuntu-latest
     steps:
-      - name: Get latest merge PR number
-        id: latest_merged_pr_number
-        run: echo "PULL_REQUEST_NUMBER=$(gh pr list --repo besu-eth/besu --base main --state merged --json "number,mergedAt" --search "sort:updated-desc" --jq 'max_by(.mergedAt)|.number')" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get acceptance test reports from latest merged PR
+      - name: Get acceptance test reports from main
         uses: dawidd6/action-download-artifact@7f871e041ed7fe12467d2d4196da8a466c5311ff # v22
         with:
           workflow: ci.yml
           workflow_conclusion: success
-          pr: ${{ env.LATEST_MERGED_PR_NUMBER }}
+          branch: main
           name_is_regexp: true
           name: 'acceptance-node-\d+-test-results'
           path: acceptance-tests-timing-reports
           if_no_artifact_found: fail
-        env:
-          LATEST_MERGED_PR_NUMBER: ${{ steps.latest_merged_pr_number.outputs.PULL_REQUEST_NUMBER }}
       - name: Upload acceptance test results
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
