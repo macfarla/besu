@@ -48,7 +48,7 @@ jobs:
       # `splitTestsByTime.sh` uses the per-test durations in  these XMLs to distribute tests across parallel runners by historical wall-clock time rather than a naive split.
       # If the artifact is missing # (e.g. first run), splitting falls back to round-robin for all tests.
       - name: Get acceptance test reports
-        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
+        uses: dawidd6/action-download-artifact@7f871e041ed7fe12467d2d4196da8a466c5311ff # v22
         continue-on-error: true
         with:
           branch: main
