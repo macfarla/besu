@@ -454,13 +454,28 @@ public abstract class AbstractTransactionPoolTest extends AbstractTransactionPoo
   }
 
   private Transaction transactionOfEncodedSize(final int targetEncodedSize) {
-    final Transaction tx =
-        createBaseTransaction(0)
-            .payload(Bytes.wrap(new byte[targetEncodedSize - encodedOverheadForLargePayload()]))
-            .createTransaction(KEY_PAIR1);
-    // guard the arithmetic above rather than silently testing the wrong size
-    assertThat(tx.getSizeForBlockInclusion()).isEqualTo(targetEncodedSize);
-    return tx;
+    // The ECDSA signature's r/s components are minimally RLP-encoded, so their byte length
+    // varies (about 1 in 256 times a leading zero byte is dropped) depending on the signed
+    // message. Since every payload length signs a different message, the overhead measured
+    // against one transaction isn't guaranteed to carry over exactly to another: adjust and
+    // re-sign until the actual encoded size lands on the target instead of assuming it will.
+    // Resizing alone can never get there for some keys, because the length one byte below the
+    // target and the one above both sign to a fixed size that straddles it, so each attempt
+    // also alters a payload byte to draw a different signature for the same length.
+    int payloadSize = targetEncodedSize - encodedOverheadForLargePayload();
+    for (int attempt = 0; attempt < 16; attempt++) {
+      final byte[] payload = new byte[payloadSize];
+      payload[0] = (byte) attempt;
+      final Transaction tx =
+          createBaseTransaction(0).payload(Bytes.wrap(payload)).createTransaction(KEY_PAIR1);
+      final int actualEncodedSize = tx.getSizeForBlockInclusion();
+      if (actualEncodedSize == targetEncodedSize) {
+        return tx;
+      }
+      payloadSize += targetEncodedSize - actualEncodedSize;
+    }
+    throw new AssertionError(
+        "Could not converge on a transaction of encoded size " + targetEncodedSize);
   }
 
   @Test
