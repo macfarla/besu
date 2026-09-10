@@ -106,7 +106,7 @@ public abstract class RocksDBColumnarKeyValueStorage implements SegmentedKeyValu
    * lock while reset() drops, recreates, and closes the old native handle — ensuring no in-flight
    * reader holds a stale pointer when the native object is freed.
    */
-  private final ReadWriteLock columnFamilyResetLock = new ReentrantReadWriteLock();
+  protected final ReadWriteLock columnFamilyResetLock = new ReentrantReadWriteLock();
 
   private final WriteOptions tryDeleteOptions =
       new WriteOptions().setNoSlowdown(true).setIgnoreMissingColumnFamilies(true);
