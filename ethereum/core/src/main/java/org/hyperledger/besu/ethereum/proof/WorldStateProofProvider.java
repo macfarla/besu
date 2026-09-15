@@ -106,17 +106,13 @@ public class WorldStateProofProvider {
     return storageProofs;
   }
 
-  // For a non-existent account every storage slot is absent. We generate proofs against an empty
-  // trie so callers get N entries with empty proof nodes and value=0 — satisfying EIP-1186.
+  // For a non-existent account every storage slot is absent — return an empty proof per key.
   private SortedMap<UInt256, Proof<Bytes>> getStorageProofsForNonExistentAccount(
       final List<UInt256> accountStorageKeys) {
-    final MerkleTrie<Bytes32, Bytes> emptyStorageTrie = new SimpleMerklePatriciaTrie<>(b -> b);
     final NavigableMap<UInt256, Proof<Bytes>> storageProofs =
         new TreeMap<>(Comparator.comparing(Bytes32::toHexString));
-    accountStorageKeys.forEach(
-        key ->
-            storageProofs.put(
-                key, emptyStorageTrie.getValueWithProof(Bytes32.wrap(Hash.hash(key).getBytes()))));
+    final Proof<Bytes> emptyProof = new Proof<>(Optional.empty(), List.of());
+    accountStorageKeys.forEach(key -> storageProofs.put(key, emptyProof));
     return storageProofs;
   }
 
