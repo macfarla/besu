@@ -21,11 +21,59 @@ geth init --datadir ./data genesis.json
 geth import --datadir ./data blocks.bin
 ```
 
+## Manually regenerating `blocks.bin`
+
+`../chain-data/blocks.json` is the source of the test transactions. Append blocks instead of changing existing ones so existing hashes remain stable.
+
+1. Initialize a clean Geth data directory from `genesis.json`:
+
+   ```bash
+   cd ../chain-data
+   geth init --datadir ./data genesis.json
+   ```
+
+2. Start Geth with deterministic periodic mining and the required RPC APIs:
+
+   ```bash
+   geth --datadir ./data --dev --dev.period 5 \
+     --http --http.api eth,net,web3,debug,miner,txpool \
+     --nodiscover --maxpeers 0 --gcmode archive
+   ```
+
+3. Replay `blocks.json` in block-number order. For every transaction:
+
+   - derive the sender from `secretKey`;
+   - use the exact `gasLimit`, `gasPrice`, `to`, `value`, and `data` values;
+   - sign with the chain ID from `genesis.json` and the sender's next nonce;
+   - submit the signed bytes with `eth_sendRawTransaction`.
+
+   Submit all transactions assigned to one block within the same five-second mining interval. Use raw transaction submission because some fixtures intentionally revert. For an empty block, wait for the next mining interval without submitting a transaction. After each interval, verify the block number, transaction count, and transaction order before continuing.
+
+4. Stop Geth immediately after the final configured block, then export blocks 1 through that block:
+
+   ```bash
+   geth export blocks.bin 1 <last-block-number> --datadir ./data
+   ```
+
+5. Initialize a second clean data directory, import the new `blocks.bin`, and confirm its final block and transaction hashes before replacing the checked-in file.
+
+6. Query Geth's `debug_traceBlockByNumber` for the new block and each required tracer configuration. Store the complete JSON-RPC request, response, and HTTP status in the matching `specs/` directory. For `callTracer`, generate both the default result and `{"tracerConfig":{"onlyTopCall":true}}` variant. For `flatCallTracer`, generate the default result plus `{"tracerConfig":{"convertParityErrors":true}}` and `{"tracerConfig":{"includePrecompiles":true}}` variants.
+
+7. Verify the regenerated chain and specs in Besu:
+
+   ```bash
+   ./gradlew :ethereum:api:test \
+     --tests 'org.hyperledger.besu.ethereum.api.jsonrpc.bonsai.DebugGethTraceJsonRpcHttpBySpecTest'
+   ```
+
 ## Directory Structure
 
 Each tracer has its own directory under `specs/`:
 
 - **`call-tracer/`** - Call tracer specs
+- **`flatcall-tracer/`** - Flat call tracer specs
+  - `convert-parity-errors/` - Parity-style error strings
+  - `include-precompiles/` - Preserves precompile calls
 - **`prestate-tracer/`** - Pre-state tracer specs
   - `diff-mode-false/` - Pre-state only
   - `diff-mode-true/` - Pre and post state
@@ -42,6 +90,20 @@ Traces call execution including:
 - Value transfers
 
 **Files**: `{number}-debug-call-tracer-0x{block}-{description}.json`
+
+### flatCallTracer
+Reports call frame information of a transaction in a flat parity-style format:
+- Action (callType, creationMethod, from, to, gas, value, input, init, balance, refundAddress)
+- Result (gasUsed, output, address, code)
+- Subtraces count
+- Trace address path
+
+**Modes**:
+- Default: CALL/STATICCALL to precompiles are pruned, standard error strings
+- `convertParityErrors: true`: maps error strings to Parity format
+- `includePrecompiles: true`: includes calls to precompiled contracts
+
+**Files**: `{number}-debug-flatcall-tracer-0x{block}-{description}.json`
 
 ### prestateTracer
 Captures state before (and optionally after) transaction execution:

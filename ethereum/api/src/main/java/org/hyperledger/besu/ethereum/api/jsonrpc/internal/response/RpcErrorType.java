@@ -61,6 +61,7 @@ public enum RpcErrorType implements RpcMethodError {
   INVALID_ENODE_PARAMS(INVALID_PARAMS_ERROR_CODE, "Invalid enode params"),
   INVALID_EXCESS_BLOB_GAS_PARAMS(
       INVALID_PARAMS_ERROR_CODE, "Invalid excess blob gas params (missing or invalid)"),
+  INVALID_EXECUTION_REQUESTS(INVALID_PARAMS_ERROR_CODE, "Invalid execution requests"),
   INVALID_EXECUTION_REQUESTS_PARAMS(INVALID_PARAMS_ERROR_CODE, "Invalid execution requests params"),
   INVALID_BLOCK_ACCESS_LIST_PARAMS(
       INVALID_PARAMS_ERROR_CODE, "Invalid block access list params (missing or invalid)"),
@@ -155,7 +156,8 @@ public enum RpcErrorType implements RpcMethodError {
   INVALID_TRANSACTION_SIGNATURE(-32002, "Invalid signature"),
   INVALID_TRANSACTION_TYPE(INVALID_PARAMS_ERROR_CODE, "Invalid transaction type"),
   INTRINSIC_GAS_EXCEEDS_LIMIT(-32003, "Intrinsic gas exceeds gas limit"),
-  TRANSACTION_UPFRONT_COST_EXCEEDS_BALANCE(-32004, "Upfront cost exceeds account balance"),
+  TRANSACTION_UPFRONT_GAS_COST_EXCEEDS_BALANCE(-32004, "Upfront gas cost exceeds account balance"),
+  INSUFFICIENT_FUNDS_FOR_TRANSFER(-32004, "Insufficient funds for transfer"),
   EXCEEDS_BLOCK_GAS_LIMIT(-32005, "Transaction gas limit exceeds block gas limit"),
   EXCEEDS_TRANSACTION_GAS_LIMIT(-32005, "Transaction gas limit cap exceeded"),
   EXCEEDS_RPC_MAX_ACTIVE_SUBSCRIPTIONS(-32005, "Maximum number of active subscriptions exceeded"),

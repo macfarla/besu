@@ -22,7 +22,7 @@ import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason
 import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason.GAS_PRICE_BELOW_CURRENT_BASE_FEE;
 import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason.INVALID_TRANSACTION_FORMAT;
 import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason.MAX_PRIORITY_FEE_PER_GAS_EXCEEDS_MAX_FEE_PER_GAS;
-import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason.UPFRONT_COST_EXCEEDS_BALANCE;
+import static org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason.UPFRONT_GAS_COST_EXCEEDS_BALANCE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -237,7 +237,8 @@ public class MainnetTransactionValidatorTest extends TrustedSetupClassLoaderExte
         createTransactionValidator(
             gasCalculator, GasLimitCalculator.constant(), false, Optional.of(BigInteger.ONE));
     assertThat(validator.validateForSender(basicTransaction, null, processingBlockParams))
-        .isEqualTo(ValidationResult.invalid(TransactionInvalidReason.UPFRONT_COST_EXCEEDS_BALANCE));
+        .isEqualTo(
+            ValidationResult.invalid(TransactionInvalidReason.UPFRONT_GAS_COST_EXCEEDS_BALANCE));
   }
 
   @Test
@@ -364,7 +365,8 @@ public class MainnetTransactionValidatorTest extends TrustedSetupClassLoaderExte
   static List<Arguments> transactionWithMaxFeeTimesGasLimitGreaterThanBalanceArguments =
       List.of(
           Arguments.of(
-              transactionSimulationParams, ValidationResult.invalid(UPFRONT_COST_EXCEEDS_BALANCE)),
+              transactionSimulationParams,
+              ValidationResult.invalid(UPFRONT_GAS_COST_EXCEEDS_BALANCE)),
           Arguments.of(transactionPoolParams, ValidationResult.valid()));
 
   @ParameterizedTest
@@ -429,6 +431,43 @@ public class MainnetTransactionValidatorTest extends TrustedSetupClassLoaderExte
         .isEqualTo(ValidationResult.invalid(MAX_PRIORITY_FEE_PER_GAS_EXCEEDS_MAX_FEE_PER_GAS));
     assertThat(validationResult.getErrorMessage())
         .isEqualTo("max priority fee per gas cannot be greater than max fee per gas");
+  }
+
+  @Test
+  public void shouldRejectCodeDelegationTransactionWithEmptyDelegationList() {
+    final TransactionValidator validator =
+        createTransactionValidator(
+            gasCalculator,
+            GasLimitCalculator.constant(),
+            FeeMarket.london(0L),
+            false,
+            Optional.of(BigInteger.ONE),
+            Set.of(TransactionType.DELEGATE_CODE),
+            Integer.MAX_VALUE);
+    final Transaction transaction =
+        Transaction.builder()
+            .type(TransactionType.DELEGATE_CODE)
+            .nonce(0)
+            .maxPriorityFeePerGas(Wei.of(1))
+            .maxFeePerGas(Wei.of(2))
+            .gasLimit(21_000)
+            .to(Address.ZERO)
+            .value(Wei.ZERO)
+            .payload(Bytes.EMPTY)
+            .chainId(BigInteger.ONE)
+            .codeDelegations(List.of())
+            .signAndBuild(senderKeys);
+
+    final ValidationResult<TransactionInvalidReason> validationResult =
+        validator.validate(
+            transaction, Optional.of(Wei.ONE), Optional.empty(), transactionPoolParams);
+
+    assertThat(validationResult.isValid()).isFalse();
+    assertThat(validationResult.getInvalidReason())
+        .isEqualTo(TransactionInvalidReason.EMPTY_CODE_DELEGATION);
+    assertThat(validationResult.getErrorMessage())
+        .isEqualTo(
+            "transaction code delegation transactions must have a non-empty code delegation list");
   }
 
   @Test

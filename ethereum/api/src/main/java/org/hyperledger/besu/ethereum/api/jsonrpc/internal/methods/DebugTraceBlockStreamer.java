@@ -34,7 +34,6 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.AccessLocationTracker;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
-import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
 import org.hyperledger.besu.ethereum.vm.StreamingDebugOperationTracer;
 import org.hyperledger.besu.evm.ModificationNotAllowedException;
 import org.hyperledger.besu.evm.account.MutableAccount;
@@ -184,7 +183,9 @@ public class DebugTraceBlockStreamer {
 
             final boolean isOpcodeTracer = traceOptions.tracerType() == TracerType.OPCODE_TRACER;
 
-            for (final Transaction transaction : block.getBody().getTransactions()) {
+            final List<Transaction> transactions = block.getBody().getTransactions();
+            for (int i = 0; i < transactions.size(); i++) {
+              final Transaction transaction = transactions.get(i);
               if (isOpcodeTracer) {
                 streamOpcodeTransaction(
                     transaction,
@@ -199,6 +200,7 @@ public class DebugTraceBlockStreamer {
                       mapper.writeValueAsBytes(
                           buildTransactionResult(
                               transaction,
+                              i,
                               chainUpdater,
                               transactionProcessor,
                               protocolSpec,
@@ -250,10 +252,13 @@ public class DebugTraceBlockStreamer {
                   .getPreExecutionProcessor()
                   .createBlockHashLookup(blockchainQueries.getBlockchain(), header);
 
-          for (final Transaction transaction : block.getBody().getTransactions()) {
+          final List<Transaction> transactions = block.getBody().getTransactions();
+          for (int i = 0; i < transactions.size(); i++) {
+            final Transaction transaction = transactions.get(i);
             results.add(
                 buildTransactionResult(
                     transaction,
+                    i,
                     chainUpdater,
                     transactionProcessor,
                     protocolSpec,
@@ -321,15 +326,14 @@ public class DebugTraceBlockStreamer {
 
   private DebugTraceTransactionResult buildTransactionResult(
       final Transaction transaction,
+      final int transactionIndex,
       final TraceBlock.ChainUpdater chainUpdater,
       final MainnetTransactionProcessor transactionProcessor,
       final ProtocolSpec protocolSpec,
       final BlockHeader header,
       final Wei blobGasPrice,
       final BlockHashLookup blockHashLookup) {
-    final DebugOperationTracer tracer =
-        new DebugOperationTracer(traceOptions.opCodeTracerConfig(), true);
-
+    final DebugTraceTransactionStep step = DebugTraceTransactionStep.of(traceOptions, protocolSpec);
     final AccessLocationTracker accessListTracker =
         BlockAccessList.BlockAccessListBuilder.createTransactionAccessLocationTracker(0);
 
@@ -339,7 +343,7 @@ public class DebugTraceBlockStreamer {
             header,
             transaction,
             header.getCoinbase(),
-            tracer,
+            step.getOperationTracer(),
             blockHashLookup,
             ImmutableTransactionValidationParams.builder().build(),
             blobGasPrice,
@@ -349,13 +353,12 @@ public class DebugTraceBlockStreamer {
         new TransactionTrace(
             transaction,
             result,
-            tracer.copyTraceFrames(),
-            Optional.empty(),
+            step.getOperationTracer().getTraceFrames(),
+            Optional.of(block),
+            transactionIndex,
             accessListTracker.getTouchedAccounts());
-    tracer.reset();
 
-    return DebugTraceTransactionStepFactory.create(traceOptions, protocolSpec)
-        .apply(transactionTrace);
+    return step.buildResult(transactionTrace);
   }
 
   // ── struct log writer (hot path) ──────────────────────────────────

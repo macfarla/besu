@@ -252,9 +252,6 @@ public class Transaction
         checkArgument(
             maybeCodeDelegationList.isPresent(),
             "Must specify code delegation authorizations for code delegation transaction");
-        checkArgument(
-            !maybeCodeDelegationList.get().isEmpty(),
-            "Code delegation transaction must have at least one authorization");
       }
     }
 
@@ -655,7 +652,7 @@ public class Transaction
    *
    * @return the max up-front cost for the gas the transaction can use.
    */
-  private Wei getMaxUpfrontGasCost(final long blobGasPerBlock) {
+  public Wei getMaxUpfrontGasCost(final long blobGasPerBlock) {
     return getUpfrontGasCost(
         getMaxGasPrice(), getMaxFeePerBlobGas().orElse(Wei.ZERO), blobGasPerBlock);
   }
