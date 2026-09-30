@@ -14,10 +14,12 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
+import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter.JsonRpcParameterException;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
+import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.transaction.CallParameter;
 
 import java.util.Arrays;
@@ -39,7 +41,8 @@ public class CallParameterUtil {
           "Invalid call parameters (index 0)", RpcErrorType.INVALID_CALL_PARAMS);
     }
 
-    if (callParams.getGasPrice().isPresent()
+    if (LOG.isDebugEnabled()
+        && callParams.getGasPrice().isPresent()
         && (callParams.getMaxFeePerGas().isPresent()
             || callParams.getMaxPriorityFeePerGas().isPresent())) {
       try {
@@ -52,5 +55,29 @@ public class CallParameterUtil {
       }
     }
     return callParams;
+  }
+
+  public static boolean isAllowExceedingBalance(
+      final BlockHeader header, final CallParameter callParams) {
+    if (callParams.getStrict().isPresent()) {
+      return !callParams.getStrict().get();
+    }
+
+    final boolean isZeroGasPrice = callParams.getGasPrice().map(Wei.ZERO::equals).orElse(true);
+
+    if (header.getBaseFee().isPresent()) {
+      if (callParams.getBlobVersionedHashes().isPresent()
+          && (callParams.getMaxFeePerBlobGas().isEmpty()
+              || callParams.getMaxFeePerBlobGas().get().equals(Wei.ZERO))) {
+        return true;
+      }
+      final boolean isZeroMaxFeePerGas =
+          callParams.getMaxFeePerGas().orElse(Wei.ZERO).equals(Wei.ZERO);
+      final boolean isZeroMaxPriorityFeePerGas =
+          callParams.getMaxPriorityFeePerGas().orElse(Wei.ZERO).equals(Wei.ZERO);
+      return isZeroGasPrice && isZeroMaxFeePerGas && isZeroMaxPriorityFeePerGas;
+    }
+
+    return isZeroGasPrice;
   }
 }

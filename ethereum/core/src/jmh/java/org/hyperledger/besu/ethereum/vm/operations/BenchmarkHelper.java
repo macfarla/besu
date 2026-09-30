@@ -20,10 +20,15 @@ import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.evm.Code;
+import org.hyperledger.besu.evm.UInt256;
 import org.hyperledger.besu.evm.frame.BlockValues;
 import org.hyperledger.besu.evm.frame.MessageFrame;
+import org.hyperledger.besu.evm.internal.AddressStorageSlotKey;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiPredicate;
@@ -32,7 +37,6 @@ import java.util.function.Supplier;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
-import org.apache.tuweni.units.bigints.UInt256;
 
 public class BenchmarkHelper {
   /**
@@ -211,14 +215,14 @@ public class BenchmarkHelper {
       final int dataSize,
       final boolean fixedSrcDst) {
     for (int i = 0; i < sizePool.length; i++) {
-      sizePool[i] = Bytes.wrap(UInt256.valueOf(dataSize));
+      sizePool[i] = Bytes.wrap(UInt256.fromInt(dataSize).toBytesBE());
 
       if (fixedSrcDst) {
-        destOffsetPool[i] = Bytes.wrap(UInt256.valueOf(0));
-        srcOffsetPool[i] = Bytes.wrap(UInt256.valueOf(0));
+        destOffsetPool[i] = Bytes.wrap(UInt256.fromInt(0).toBytesBE());
+        srcOffsetPool[i] = Bytes.wrap(UInt256.fromInt(0).toBytesBE());
       } else {
-        destOffsetPool[i] = Bytes.wrap(UInt256.valueOf((i * 32) % 1024));
-        srcOffsetPool[i] = Bytes.wrap(UInt256.valueOf(i % Math.max(1, dataSize)));
+        destOffsetPool[i] = Bytes.wrap(UInt256.fromInt((i * 32) % 1024).toBytesBE());
+        srcOffsetPool[i] = Bytes.wrap(UInt256.fromInt(i % Math.max(1, dataSize)).toBytesBE());
       }
     }
   }
@@ -267,5 +271,109 @@ public class BenchmarkHelper {
     int nBits = Integer.remainderUnsigned(n, 8);
     bytes[31 - nBytes] = (byte) (1 << nBits);
     return Bytes.wrap(bytes);
+  }
+
+  /**
+   * Fills a Bytes array with 32-byte hashes all of which are different between them and have
+   * distinct hashcodes.
+   *
+   * @param pool destination array
+   * @param address Address to include in the collision computation
+   * @param offset free variable with which to generate hashes
+   */
+  public static void fillPoolWithDistinctHashes(
+      final Bytes[] pool, final Address address, final int offset) throws Exception {
+    for (int i = 0; i < pool.length; i++) {
+      pool[i] = distinctHash(address, offset + i);
+    }
+  }
+
+  /**
+   * Algorithm:
+   *
+   * <p>hash = s0*A0 + s1*A1 + s2*A2 + s3*A3 + a0*A4 + a1·A5 + a2*A6
+   *
+   * <p>hashCode = (int)(H >>> 32)
+   *
+   * <p>sN - slot limbs
+   *
+   * <p>aN - address limbs
+   *
+   * <p>AN - seeds
+   *
+   * <p>Computes `s1` as all other limbs are made zero. `index` controls high order limbs of `hash`
+   * so there are no collisions for the whole size of the int.
+   */
+  private static Bytes32 distinctHash(final Address address, final int index) throws Exception {
+    final ByteBuffer addrBytes =
+        ByteBuffer.wrap(address.getBytes().toArrayUnsafe()).order(ByteOrder.LITTLE_ENDIAN);
+    final long[] seeds = readSeeds();
+    final long k =
+        addrBytes.getLong(0) * seeds[4]
+            + addrBytes.getLong(8) * seeds[5]
+            + addrBytes.getLong(12) * seeds[6];
+    final long invA1 = inv(seeds[1]);
+
+    final ByteBuffer slotBytes = ByteBuffer.wrap(new byte[32]).order(ByteOrder.LITTLE_ENDIAN);
+    // s0 = s2 = s3 = 0
+    slotBytes.putLong(8, invA1 * ((((long) index) << 32) - k));
+    return Bytes32.wrap(slotBytes.array());
+  }
+
+  /**
+   * Fills a Bytes array with 32-byte hashes all of which have different values but hash to the same
+   * hashcode.
+   *
+   * @param pool destination array
+   * @param address Address to include in the collision computation
+   * @param offset free variable with which to generate hashes
+   */
+  public static void fillPoolWithCollidingHashes(
+      final Bytes[] pool, final Address address, final int offset) throws Exception {
+    for (int i = 0; i < pool.length; i++) {
+      pool[i] = collidingHash(address, offset + i);
+    }
+  }
+
+  private static long[] readSeeds() throws Exception {
+    final long[] seeds = new long[7];
+    for (int i = 0; i < 7; i++) {
+      final Field f = AddressStorageSlotKey.class.getDeclaredField("SEED_" + i);
+      f.setAccessible(true);
+      seeds[i] = f.getLong(null);
+    }
+    return seeds;
+  }
+
+  /** Inverse mod 2^64 by Newton iteration; exists because the seeded multipliers are forced odd. */
+  private static long inv(final long x) {
+    long y = x;
+    for (int i = 0; i < 6; i++) {
+      y *= 2 - x * y;
+    }
+    return y;
+  }
+
+  /**
+   * See {@link
+   * org.hyperledger.besu.evm.frame.WarmStorageHashDosTest.TransientStorage#collidingSlot(Address,
+   * int)}.
+   */
+  private static Bytes32 collidingHash(final Address address, final int index) throws Exception {
+    final ByteBuffer addrBytes =
+        ByteBuffer.wrap(address.getBytes().toArrayUnsafe()).order(ByteOrder.LITTLE_ENDIAN);
+    final long[] seeds = readSeeds();
+    final long k =
+        addrBytes.getLong(0) * seeds[4]
+            + addrBytes.getLong(8) * seeds[5]
+            + addrBytes.getLong(12) * seeds[6];
+    final long invA1 = inv(seeds[1]);
+
+    final ByteBuffer slotBytes = ByteBuffer.wrap(new byte[32]).order(ByteOrder.LITTLE_ENDIAN);
+    // s0 is free choice
+    slotBytes.putLong(0, index);
+    // solves s1; s2 and s3 = 0
+    slotBytes.putLong(8, -invA1 * (k + index * seeds[0]));
+    return Bytes32.wrap(slotBytes.array());
   }
 }

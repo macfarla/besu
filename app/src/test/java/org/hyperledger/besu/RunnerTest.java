@@ -20,7 +20,6 @@ import static org.hyperledger.besu.config.NetworkDefinition.DEV;
 import static org.hyperledger.besu.config.NetworkDefinition.MAINNET;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_BACKGROUND_THREAD_COUNT;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_CACHE_CAPACITY;
-import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_ENABLE_READ_CACHE_FOR_SNAPSHOTS;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_IS_HIGH_SPEC;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_MAX_OPEN_FILES;
 import static org.mockito.Mockito.mock;
@@ -56,6 +55,7 @@ import org.hyperledger.besu.ethereum.mainnet.BlockImportResult;
 import org.hyperledger.besu.ethereum.mainnet.HeaderValidationMode;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
+import org.hyperledger.besu.ethereum.mainnet.pluginadapter.TransactionValidatorServiceImpl;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.discovery.NodeIdentifier;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
@@ -73,7 +73,6 @@ import org.hyperledger.besu.plugin.services.storage.rocksdb.RocksDBMetricsFactor
 import org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBFactoryConfiguration;
 import org.hyperledger.besu.services.BesuConfigurationImpl;
 import org.hyperledger.besu.services.BesuPluginContextImpl;
-import org.hyperledger.besu.services.TransactionValidatorServiceImpl;
 import org.hyperledger.besu.testutil.TestClock;
 
 import java.io.IOException;
@@ -409,7 +408,7 @@ public final class RunnerTest {
                         DEFAULT_BACKGROUND_THREAD_COUNT,
                         DEFAULT_CACHE_CAPACITY,
                         DEFAULT_IS_HIGH_SPEC,
-                        DEFAULT_ENABLE_READ_CACHE_FOR_SNAPSHOTS,
+                        false,
                         false,
                         Optional.empty(),
                         Optional.empty()),

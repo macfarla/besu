@@ -128,15 +128,20 @@ public sealed class EngineForkchoiceUpdatedV1<
       return new JsonRpcErrorResponse(requestId, structResult);
     }
 
-    if (mergeCoordinator.isBadBlock(forkChoice.getHeadBlockHash())) {
+    // a head that descends from a bad block must not start a backward sync, it would re-execute the
+    // bad block on every forkchoice update
+    if (mergeCoordinator.isBadBlock(forkChoice.getHeadBlockHash())
+        || mergeCoordinator.checkAndMarkBadDescendant(forkChoice.getHeadBlockHash())) {
       logFCU(INVALID, forkChoice);
       return new JsonRpcSuccessResponse(
           requestId,
           new ForkchoiceUpdatedResultV1(
               INVALID,
+              // null when no valid ancestor can be determined, Hash.ZERO would assert invalid
+              // ancestry all the way back to the pre-merge terminal block
               mergeCoordinator
                   .getLatestValidHashOfBadBlock(forkChoice.getHeadBlockHash())
-                  .orElse(Hash.ZERO),
+                  .orElse(null),
               null,
               Optional.of(forkChoice.getHeadBlockHash() + " is an invalid block")));
     }
@@ -229,8 +234,7 @@ public sealed class EngineForkchoiceUpdatedV1<
     // forkchoiceState and only if the payload referenced by forkchoiceState.headBlockHash is VALID.
     // The processing flow is as follows:
     if (forkchoiceResult.shouldNotProceedToPayloadBuildProcess()) {
-      logFCU(INVALID, forkChoice);
-      return handleNonValidForkchoiceUpdate(requestId, forkchoiceResult);
+      return handleNonValidForkchoiceUpdate(requestId, forkChoice, forkchoiceResult);
     }
 
     PayloadIdentifier payloadId = null;
@@ -325,7 +329,9 @@ public sealed class EngineForkchoiceUpdatedV1<
       final BlockHeader newHead, final PA attrs) {
     // 8.i. Verify that payloadAttributes.timestamp is greater than timestamp of a block referenced
     // by forkchoiceState.headBlockHash and return -38003: Invalid payload attributes on failure.
-    if (attrs.getTimestamp() <= newHead.getTimestamp()) {
+    // Both timestamps are uint64 carried in longs, so they must be compared unsigned: a value above
+    // Long.MAX_VALUE is negative and would otherwise look older than the head block.
+    if (Long.compareUnsigned(attrs.getTimestamp(), newHead.getTimestamp()) <= 0) {
       return ValidationResult.invalid(
           getInvalidPayloadAttributesError(),
           "Payload attributes timestamp %d not greater than head block timestamp %d"
@@ -402,7 +408,12 @@ public sealed class EngineForkchoiceUpdatedV1<
   }
 
   private JsonRpcResponse handleNonValidForkchoiceUpdate(
-      final Object requestId, final ForkchoiceResult result) {
+      final Object requestId, final ForkchoiceStateV1 forkChoice, final ForkchoiceResult result) {
+    if (result.getStatus() == ForkchoiceResult.Status.INTERNAL_ERROR) {
+      return new JsonRpcErrorResponse(
+          requestId, RpcErrorType.INTERNAL_ERROR, result.getErrorMessage().orElse(null));
+    }
+    logFCU(INVALID, forkChoice);
     final Optional<Hash> latestValid = result.getLatestValid();
     if (result.getStatus() == ForkchoiceResult.Status.INVALID) {
       return new JsonRpcSuccessResponse(

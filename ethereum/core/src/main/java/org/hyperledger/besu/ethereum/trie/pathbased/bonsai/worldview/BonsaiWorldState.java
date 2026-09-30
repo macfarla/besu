@@ -23,23 +23,26 @@ import org.hyperledger.besu.ethereum.trie.MerkleTrie;
 import org.hyperledger.besu.ethereum.trie.NoOpMerkleTrie;
 import org.hyperledger.besu.ethereum.trie.NodeLoader;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.account.BonsaiAccount;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.code.BonsaiCodeCache;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.provider.BonsaiWorldStateProvider;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.BonsaiWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.BonsaiWorldStateLayerStorage;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.trielog.TrieLogManager;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.accumulator.BonsaiWorldStateUpdateAccumulator;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.accumulator.preload.BonsaiCachedMerkleTrieLoader;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.accumulator.preload.NoOpBonsaiCachedMerkleTrieLoader;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.bal.BonsaiBalWorldStateUpdateAccumulator;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.code.PathBasedCodeCache;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.trielog.TrieLogManager;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.PathBasedWorldState;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.WorldStateConfig;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.worldview.cache.PathBasedWorldStateCacheManager;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.cache.PathBasedWorldStateCacheManager;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.frontier.CachingFrontierStorageRootTracker;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.frontier.FrontierRootHashTracker;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.frontier.FrontierStorageRootTracker;
 import org.hyperledger.besu.ethereum.trie.patricia.ParallelStoredMerklePatriciaTrie;
 import org.hyperledger.besu.ethereum.trie.patricia.StoredMerklePatriciaTrie;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
+import org.hyperledger.besu.plugin.data.BlockHeader;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
+import org.hyperledger.besu.plugin.services.worldstate.StateRootCommitter;
 
 import java.util.Map;
 import java.util.Optional;
@@ -56,15 +59,16 @@ import org.apache.tuweni.units.bigints.UInt256;
 public class BonsaiWorldState extends PathBasedWorldState {
 
   protected BonsaiCachedMerkleTrieLoader bonsaiCachedMerkleTrieLoader;
-  private final PathBasedCodeCache codeCache;
+  private final BonsaiCodeCache codeCache;
   private final EvmConfiguration evmConfiguration;
+  private final FrontierRootHashTracker frontierRootHashTracker;
 
   public BonsaiWorldState(
       final BonsaiWorldStateProvider archive,
       final BonsaiWorldStateKeyValueStorage worldStateKeyValueStorage,
       final EvmConfiguration evmConfiguration,
       final WorldStateConfig worldStateConfig,
-      final PathBasedCodeCache codeCache) {
+      final BonsaiCodeCache codeCache) {
     this(
         worldStateKeyValueStorage,
         archive.getCachedMerkleTrieLoader(),
@@ -82,12 +86,12 @@ public class BonsaiWorldState extends PathBasedWorldState {
       final TrieLogManager trieLogManager,
       final EvmConfiguration evmConfiguration,
       final WorldStateConfig worldStateConfig,
-      final PathBasedCodeCache codeCache) {
+      final BonsaiCodeCache codeCache) {
     super(worldStateKeyValueStorage, worldStateCacheManager, trieLogManager, worldStateConfig);
     this.bonsaiCachedMerkleTrieLoader = bonsaiCachedMerkleTrieLoader;
     this.worldStateKeyValueStorage = worldStateKeyValueStorage;
     this.evmConfiguration = evmConfiguration;
-    this.setAccumulator(
+    final BonsaiWorldStateUpdateAccumulator acc =
         new BonsaiWorldStateUpdateAccumulator(
             this,
             (addr, value) ->
@@ -97,8 +101,43 @@ public class BonsaiWorldState extends PathBasedWorldState {
                 this.bonsaiCachedMerkleTrieLoader.preLoadStorageSlot(
                     getWorldStateStorage(), addr, value),
             evmConfiguration,
-            codeCache));
+            codeCache);
+    this.setAccumulator(acc);
+    final FrontierStorageRootTracker frontierStorageRootTracker =
+        worldStateConfig.isTrieDisabled()
+            ? FrontierStorageRootTracker.NO_OP
+            : new CachingFrontierStorageRootTracker(
+                acc,
+                (addressHash, baseRoot) ->
+                    createFrontierTrie(
+                        (location, key) ->
+                            bonsaiCachedMerkleTrieLoader.getAccountStorageTrieNode(
+                                getWorldStateStorage(), addressHash, location, key),
+                        Bytes32.wrap(baseRoot.getBytes())));
+    this.frontierRootHashTracker =
+        new FrontierRootHashTracker(
+            acc,
+            rootHash ->
+                createFrontierTrie(
+                    (location, hash) ->
+                        bonsaiCachedMerkleTrieLoader.getAccountStateTrieNode(
+                            getWorldStateStorage(), location, hash),
+                    rootHash),
+            frontierStorageRootTracker);
+    // Keep frontier-derived caches aligned with accumulator resets.
+    acc.setCommittedTransactionListener(frontierRootHashTracker);
     this.codeCache = codeCache;
+  }
+
+  @Override
+  public void persist(final BlockHeader blockHeader, final StateRootCommitter committer) {
+    frontierRootHashTracker.reset();
+    super.persist(blockHeader, committer);
+  }
+
+  @Override
+  public Hash frontierRootHash() {
+    return frontierRootHashTracker.frontierRootHash(worldStateRootHash);
   }
 
   @Override
@@ -115,7 +154,7 @@ public class BonsaiWorldState extends PathBasedWorldState {
 
   @Override
   public BonsaiWorldStateKeyValueStorage getWorldStateStorage() {
-    return (BonsaiWorldStateKeyValueStorage) worldStateKeyValueStorage;
+    return worldStateKeyValueStorage;
   }
 
   @Override
@@ -183,6 +222,20 @@ public class BonsaiWorldState extends PathBasedWorldState {
     this.bonsaiCachedMerkleTrieLoader = new NoOpBonsaiCachedMerkleTrieLoader();
   }
 
+  /**
+   * Frontier receipt computation is inherently sequential (each receipt depends on the prior
+   * transaction's state root), so its tries skip the parallel implementation and its ForkJoinPool
+   * scheduling overhead.
+   */
+  private MerkleTrie<Bytes, Bytes> createFrontierTrie(
+      final NodeLoader nodeLoader, final Bytes32 rootHash) {
+    if (worldStateConfig.isTrieDisabled()) {
+      return new NoOpMerkleTrie<>();
+    }
+    return new StoredMerklePatriciaTrie<>(
+        nodeLoader, rootHash, Function.identity(), Function.identity());
+  }
+
   /** Account state trie rooted at the current world state root. */
   public MerkleTrie<Bytes, Bytes> createAccountStateTrie() {
     return createTrie(
@@ -232,7 +285,7 @@ public class BonsaiWorldState extends PathBasedWorldState {
   }
 
   @Override
-  public PathBasedCodeCache codeCache() {
+  public BonsaiCodeCache codeCache() {
     return codeCache;
   }
 }

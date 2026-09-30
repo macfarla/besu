@@ -58,9 +58,11 @@ dependencies {
     api project(':ethereum:api')
     api project(':ethereum:api:plugin-api')
     api project(':ethereum:blockcreation')
+    api project(':ethereum:blockcreation:plugin-api')
     api project(':ethereum:core')
     api project(':ethereum:core:plugin-api-chain')
     api project(':ethereum:core:plugin-api-execution')
+    api project(':ethereum:core:plugin-api-validation')
     api project(':ethereum:core:plugin-api-worldstate')
     api project(':ethereum:core:plugin-api-worldstate-backend')
     api project(':ethereum:eth')
@@ -160,8 +162,8 @@ dependencies {
 
     api 'org.awaitility:awaitility:4.3.0'
 
-    api 'org.bouncycastle:bcpkix-jdk18on:1.84'
-    api 'org.bouncycastle:bcprov-jdk18on:1.84'
+    api 'org.bouncycastle:bcpkix-jdk18on:1.85'
+    api 'org.bouncycastle:bcprov-jdk18on:1.85'
 
     api 'org.fusesource.jansi:jansi:2.4.2'
 

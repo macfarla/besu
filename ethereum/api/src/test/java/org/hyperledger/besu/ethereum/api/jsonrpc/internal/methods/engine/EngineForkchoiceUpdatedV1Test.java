@@ -48,6 +48,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcRespon
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.ForkchoiceUpdatedResultV1;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.Quantity;
 import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockHeaderTestFixture;
@@ -77,6 +78,12 @@ import org.mockito.quality.Strictness;
 @MockitoSettings(strictness = Strictness.LENIENT)
 public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
   protected static final Consumer<BlockHeaderTestFixture> NO_OP = _ -> {};
+
+  /**
+   * uint64 {@code 0xfffffffffffffffe}: above {@code Long.MAX_VALUE}, so carried as a negative long.
+   */
+  protected static final long TIMESTAMP_ABOVE_LONG_MAX_VALUE = -2L;
+
   protected EngineForkchoiceUpdatedV1<?, ?> method;
 
   protected static final Vertx vertx = Vertx.vertx();
@@ -170,14 +177,14 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
 
   protected Object validPayloadAttributesForBlock(final BlockHeader head) {
     return new PayloadAttributesV1(
-        String.valueOf(head.getTimestamp() + 1),
+        Quantity.create(head.getTimestamp() + 1),
         Bytes32.fromHexStringLenient("0xDEADBEEF").toHexString(),
         "0x0000000000000000000000000000000000000001");
   }
 
   protected Object invalidTimestampPayloadAttributesForBlock(final BlockHeader head) {
     return new PayloadAttributesV1(
-        String.valueOf(head.getTimestamp()),
+        Quantity.create(head.getTimestamp()),
         Bytes32.fromHexStringLenient("0xDEADBEEF").toHexString(),
         "0x0000000000000000000000000000000000000001");
   }
@@ -270,6 +277,53 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
     assertThat(result.getPayloadId()).isNull();
     verify(engineCallListener, times(1)).executionEngineCalled();
     verify(mergeContext, never()).fireNewUnverifiedForkchoiceEvent(any(), any(), any());
+  }
+
+  @Test
+  public void shouldReturnInvalidWithoutSyncingWhenHeadDescendsFromBadBlock() {
+    final BlockHeader mockParent = blockHeaderBuilder.buildHeader();
+    blockHeaderBuilder.parentHash(mockParent.getHash());
+    final BlockHeader mockHeader = blockHeaderBuilder.buildHeader();
+    final Hash latestValidHash = Hash.hash(Bytes32.fromHexStringLenient("0xcafebabe"));
+    when(mergeCoordinator.isBadBlock(mockHeader.getHash())).thenReturn(false);
+    when(mergeCoordinator.checkAndMarkBadDescendant(mockHeader.getHash())).thenReturn(true);
+    when(mergeCoordinator.getLatestValidHashOfBadBlock(mockHeader.getHash()))
+        .thenReturn(Optional.of(latestValidHash));
+
+    final JsonRpcResponse resp =
+        resp(
+            new ForkchoiceStateV1(
+                mockHeader.getHash(), mockHeader.getParentHash(), mockHeader.getParentHash()),
+            Optional.empty());
+
+    assertThat(resp.getType()).isEqualTo(RpcResponseType.SUCCESS);
+    final ForkchoiceUpdatedResultV1 result =
+        (ForkchoiceUpdatedResultV1) ((JsonRpcSuccessResponse) resp).getResult();
+    assertThat(result.getPayloadStatus().getStatus()).isEqualTo(INVALID);
+    assertThat(result.getPayloadStatus().getLatestValidHash())
+        .isEqualTo(Optional.of(latestValidHash));
+    assertThat(result.getPayloadId()).isNull();
+    verify(mergeCoordinator, never()).getOrSyncHeadByHash(any(), any());
+    verify(engineCallListener, times(1)).executionEngineCalled();
+    verify(mergeContext, never()).fireNewUnverifiedForkchoiceEvent(any(), any(), any());
+  }
+
+  @Test
+  public void shouldReturnNullLatestValidHashWhenNoneIsKnownForABadHead() {
+    final BlockHeader mockHeader = blockHeaderBuilder.buildHeader();
+    when(mergeCoordinator.isBadBlock(mockHeader.getHash())).thenReturn(true);
+    when(mergeCoordinator.getLatestValidHashOfBadBlock(mockHeader.getHash()))
+        .thenReturn(Optional.empty());
+
+    final JsonRpcResponse resp =
+        resp(new ForkchoiceStateV1(mockHeader.getHash(), Hash.ZERO, Hash.ZERO), Optional.empty());
+
+    assertThat(resp.getType()).isEqualTo(RpcResponseType.SUCCESS);
+    final ForkchoiceUpdatedResultV1 result =
+        (ForkchoiceUpdatedResultV1) ((JsonRpcSuccessResponse) resp).getResult();
+    assertThat(result.getPayloadStatus().getStatus()).isEqualTo(INVALID);
+    assertThat(result.getPayloadStatus().getLatestValidHash()).isEmpty();
+    verify(mergeCoordinator, never()).getOrSyncHeadByHash(any(), any());
   }
 
   @Test
@@ -468,6 +522,30 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
   }
 
   @Test
+  public void shouldReturnInternalErrorWhenHeadCannotBeSet() {
+    final BlockHeader mockParent = blockHeaderBuilder.number(9L).buildHeader();
+    final BlockHeader mockHeader =
+        setupValidForkchoiceUpdate(bhb -> bhb.number(10L).parentHash(mockParent.getHash()));
+
+    when(mergeCoordinator.updateForkChoice(mockHeader, mockParent.getHash(), mockParent.getHash()))
+        .thenReturn(
+            ForkchoiceResult.withFailure(
+                ForkchoiceResult.Status.INTERNAL_ERROR,
+                "Failed to set new head",
+                Optional.empty()));
+
+    final JsonRpcResponse resp =
+        resp(
+            new ForkchoiceStateV1(
+                mockHeader.getBlockHash(), mockParent.getBlockHash(), mockParent.getBlockHash()),
+            Optional.empty());
+
+    assertThat(resp.getType()).isEqualTo(RpcResponseType.ERROR);
+    assertThat(((JsonRpcErrorResponse) resp).getErrorType()).isEqualTo(RpcErrorType.INTERNAL_ERROR);
+    verify(engineCallListener, times(1)).executionEngineCalled();
+  }
+
+  @Test
   public void shouldReturnValidWithoutFinalizedWithPayload() {
     final BlockHeader mockHeader =
         blockHeaderBuilder.timestamp(getMinSupportedTimestamp()).buildHeader();
@@ -501,6 +579,28 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
   }
 
   @Test
+  public void shouldHandlePayloadAttributesTimestampAboveLongMaxValue() {
+    // A head block at 0xfffffffffffffffe puts the payload attributes timestamp at
+    // 0xffffffffffffffff. Compared signed both are negative, so the attributes would be rejected as
+    // not newer than the head block, and from V2 on their withdrawals as pre-Shanghai.
+    final BlockHeader mockHeader =
+        setupValidForkchoiceUpdate(bhb -> bhb.timestamp(TIMESTAMP_ABOVE_LONG_MAX_VALUE));
+
+    final JsonRpcResponse resp =
+        resp(
+            new ForkchoiceStateV1(mockHeader.getBlockHash(), Hash.ZERO, Hash.ZERO),
+            Optional.of(validPayloadAttributesForBlock(mockHeader)));
+
+    if (getMaxSupportedTimestamp().isPresent()) {
+      // every version but the latest one rejects such a timestamp for being past its fork window,
+      // which it only gets to once the timestamp has parsed and passed the checks above
+      assertInvalidForkchoiceState(resp, RpcErrorType.UNSUPPORTED_FORK);
+    } else {
+      assertThat(resp).isInstanceOf(JsonRpcSuccessResponse.class);
+    }
+  }
+
+  @Test
   public void shouldSkipUpdateWhenHeadIsAncestorOfFinalized() {
     final BlockHeader finalized = blockHeaderBuilder.number(100L).buildHeader();
     final BlockHeader head = blockHeaderBuilder.number(50L).buildHeader();
@@ -516,8 +616,7 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
     final ForkchoiceUpdatedResultV1 result =
         (ForkchoiceUpdatedResultV1) ((JsonRpcSuccessResponse) resp).getResult();
     assertThat(result.getPayloadStatus().getStatus()).isEqualTo(VALID);
-    assertThat(result.getPayloadStatus().getLatestValidHashAsString())
-        .isEqualTo(head.getHash().toHexString());
+    assertThat(result.getPayloadStatus().getLatestValidHash()).contains(head.getHash());
     assertThat(result.getPayloadId()).isNull();
 
     verify(mergeCoordinator, never()).updateForkChoice(any(), any(), any());
@@ -695,7 +794,7 @@ public class EngineForkchoiceUpdatedV1Test extends AbstractScheduledApiTest {
     final JsonRpcResponse resp = resp(fcuParam, payloadParam);
     final ForkchoiceUpdatedResultV1 res = fromSuccessResp(resp);
 
-    assertThat(res.getPayloadStatus().getStatusAsString()).isEqualTo(expectedStatus.name());
+    assertThat(res.getPayloadStatus().getStatus()).isEqualTo(expectedStatus);
 
     if (expectedStatus.equals(VALID)) {
       assertThat(res.getPayloadStatus().getLatestValidHash())
