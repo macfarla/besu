@@ -37,10 +37,10 @@
 
 ## 26.9.0
 
-This release contains security fixes. Operators are advised to upgrade promptly.
-Details will be published in security advisories on
-https://github.com/besu-eth/besu/security/advisories after operators have had an
-opportunity to upgrade.
+### Security Fixes
+- [GHSA-g5j7-4r2x-rx9j](https://github.com/besu-eth/besu/security/advisories/GHSA-g5j7-4r2x-rx9j): Permissionless non-validator peer can halt QBFT finality via pre-authorization proposal decoding
+- [GHSA-qfmh-cxw4-9h66](https://github.com/besu-eth/besu/security/advisories/GHSA-qfmh-cxw4-9h66): debug_traceBlock/ByHash/ByNumber/Transaction unbounded step output — remote DoS
+- [GHSA-8j3g-67qm-7rqp](https://github.com/besu-eth/besu/security/advisories/GHSA-8j3g-67qm-7rqp): snap isValidRangeProof accepts non-empty ranges as valid — soundness gap in snap sync
 
 ### Breaking Changes
 - `BlockSimulationParameter.Builder.enforceConsensusGasLimitCaps()` is renamed to `enforceConsensusGasLimit()`. The flag now also controls whether the EIP-1559 gas limit adjustment algorithm is applied: when `true` (plugin/block-production path) `getNextGasLimit()` is used; when `false` (default, `eth_simulateV1` path) the parent gas limit is inherited unchanged, matching geth and Nethermind. [#11254](https://github.com/besu-eth/besu/pull/11254)
