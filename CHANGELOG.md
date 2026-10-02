@@ -204,6 +204,7 @@
 - [GHSA-9w9r-w3rf-j6vj](https://github.com/besu-eth/besu/security/advisories/GHSA-9w9r-w3rf-j6vj): eth_getFilterLogs and eth_newFilter missing maxLogRange enforcement
 - [GHSA-23rh-rrqg-wq82](https://github.com/besu-eth/besu/security/advisories/GHSA-23rh-rrqg-wq82): QBFT/IBFT round-change cache unbounded — single validator can exhaust heap
 - [GHSA-8g2r-qvch-4c9j](https://github.com/besu-eth/besu/security/advisories/GHSA-8g2r-qvch-4c9j): GraphQL blocks(from, to) range queries unbounded
+- [GHSA-xg9p-226c-vxvw](https://github.com/besu-eth/besu/security/advisories/GHSA-xg9p-226c-vxvw): Bonsai parallel block processor retains transaction futures after block rejection — memory exhaustion and node outage
 
 ### Upcoming Breaking Changes
 - `--min-block-occupancy-ratio` is deprecated and will be removed in a future release
