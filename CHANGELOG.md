@@ -110,6 +110,9 @@
 - [GHSA-jxwx-rxf9-pg2g](https://github.com/besu-eth/besu/security/advisories/GHSA-jxwx-rxf9-pg2g): JWT algorithm confusion — HMAC accepted with public key file
 - [GHSA-g499-x5x3-8gjj](https://github.com/besu-eth/besu/security/advisories/GHSA-g499-x5x3-8gjj): GraphQL logs(filter) unbounded block range
 - [GHSA-rw6m-h55m-hggm](https://github.com/besu-eth/besu/security/advisories/GHSA-rw6m-h55m-hggm): Transaction pool has no per-transaction encoded-size cap
+- [GHSA-h552-3fxr-chmx](https://github.com/besu-eth/besu/security/advisories/GHSA-h552-3fxr-chmx): Snap storage-range count amplification — tiny returned slot hash yields unbounded child-range count
+- [GHSA-pr92-c4mc-x48r](https://github.com/besu-eth/besu/security/advisories/GHSA-pr92-c4mc-x48r): P256VerifyPrecompile writes directly to System.err — log amplification via EVM execution
+- [GHSA-h594-ww62-rcxv](https://github.com/besu-eth/besu/security/advisories/GHSA-h594-ww62-rcxv): Invalid discv4 packet triggers unbounded log amplification — unauthenticated remote DoS
 
 ### Breaking Changes
 - JSON-RPC `eth_newFilter` and `eth_subscribe` (logs) now cap the number of addresses per filter at 1000 by default. Requests exceeding the limit are rejected with a `-32005` error. Configure via `--rpc-max-log-filter-addresses` (set to `0` for no limit).
