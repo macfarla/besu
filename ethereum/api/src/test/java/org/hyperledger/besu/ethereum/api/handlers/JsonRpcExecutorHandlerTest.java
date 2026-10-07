@@ -14,6 +14,7 @@
  */
 package org.hyperledger.besu.ethereum.api.handlers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -34,6 +35,8 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 
+import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +46,7 @@ import io.opentelemetry.api.trace.Tracer;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.impl.future.SucceededFuture;
@@ -307,5 +311,27 @@ class JsonRpcExecutorHandlerTest {
     // Should reset (not try to setStatusCode which would throw IllegalStateException)
     verify(mockResponse).reset();
     verify(mockResponse, never()).setStatusCode(anyInt());
+  }
+
+  // --- Remote-connection-closed classification ---
+
+  @Test
+  void closedChannelExceptionIsRemoteConnectionClosed() {
+    assertThat(JsonRpcExecutorHandler.isRemoteConnectionClosed(new ClosedChannelException()))
+        .isTrue();
+  }
+
+  @Test
+  void ioExceptionWrappingHttpClosedExceptionIsRemoteConnectionClosed() {
+    // The shape Vert.x surfaces when the remote end (e.g. a consensus client moving on from an
+    // engine call) drops the connection mid-response.
+    final IOException wrapped = new IOException(new HttpClosedException("Connection was closed"));
+    assertThat(JsonRpcExecutorHandler.isRemoteConnectionClosed(wrapped)).isTrue();
+  }
+
+  @Test
+  void unrelatedIoExceptionIsNotRemoteConnectionClosed() {
+    assertThat(JsonRpcExecutorHandler.isRemoteConnectionClosed(new IOException("write failed")))
+        .isFalse();
   }
 }

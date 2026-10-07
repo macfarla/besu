@@ -25,8 +25,10 @@ import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.opentelemetry.api.trace.Tracer;
 import io.vertx.core.Handler;
+import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
@@ -71,7 +73,7 @@ public class JsonRpcExecutorHandler {
                     executor.execute();
                   } catch (IOException e) {
                     final String method = executor.getRpcMethodName(ctx);
-                    if (e instanceof ClosedChannelException) {
+                    if (isRemoteConnectionClosed(e)) {
                       // The remote end closed the connection before we finished writing.
                       // No point trying to send an error response on a closed channel.
                       LOG.warn(
@@ -107,6 +109,22 @@ public class JsonRpcExecutorHandler {
         cancelTimer(ctx);
       }
     };
+  }
+
+  /**
+   * A write that fails because the remote end has already closed the connection is routine, not a
+   * fault on our side: a consensus client that moves on from an engine call, or any client that
+   * disconnects mid-response, leaves nothing to write to. Vert.x surfaces this in two shapes - a
+   * {@link ClosedChannelException}, or an {@link IOException} wrapping an {@link
+   * HttpClosedException} - and both mean the same thing, so both are logged at WARN rather than
+   * ERROR.
+   *
+   * @param e the exception thrown while writing the response
+   * @return true if it indicates the remote end closed the connection
+   */
+  @VisibleForTesting
+  static boolean isRemoteConnectionClosed(final IOException e) {
+    return e instanceof ClosedChannelException || e.getCause() instanceof HttpClosedException;
   }
 
   private static String getRequestBodyAsString(final RoutingContext ctx) {
