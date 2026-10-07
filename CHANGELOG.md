@@ -49,7 +49,7 @@
 ### Additions and Improvements
 - Update `Bouncycastle` to 1.85 to address CVEs `CVE-2026-8763` and `CVE-2026-13506`. [#11336](https://github.com/besu-eth/besu/pull/11336)
 - Update Jackson to 2.21.6 to address CVE `CVE-2026-68497` [#11396](https://github.com/besu-eth/besu/pull/11396)
-- Update Jackson to 2.21.7 to address CVE `CVE-2026-91777` 
+- Update Jackson to 2.21.7 to address CVE `CVE-2026-91777` [#11503](https://github.com/besu-eth/besu/pull/11503)
 - `PoaQueryService` and `BftQueryService` are no longer deprecated. [#11376](https://github.com/besu-eth/besu/pull/11376)
 - Add `engine_newPayloadWithWitnessV5` whose VALID response also carries the EIP-8025 execution witness [#11181](https://github.com/besu-eth/besu/pull/11181)
 - Add `debug_getRawExecutionRequests`, which re-executes a block and returns the EIP-7685 execution requests it produced, in the Engine API `executionRequests` form (`null` before Prague). [#11481](https://github.com/besu-eth/besu/pull/11481)
