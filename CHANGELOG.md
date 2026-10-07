@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Breaking Changes
+- `--Xsnapsync-synchronizer-pivot-block-distance-before-caching` has been removed; it was deprecated as a no-op since 26.6.1.
 - The default discovery mode is now `BOTH`: nodes run DiscV4 and DiscV5 concurrently unless `--discovery-mode=V4` or `--discovery-mode=V5` selects a single protocol. [#11344](https://github.com/besu-eth/besu/pull/11344)
 - `trace_call` and `trace_callMany` now select transaction validation as `eth_call` does, including its `strict` flag. Unless `strict` is `true`, a call whose `gasPrice`, `maxFeePerGas` and `maxPriorityFeePerGas` are all zero or omitted runs with `GASPRICE` and `BASEFEE` 0 and pays no execution gas fees. Previously such a call was rejected as underpriced at a block with a base fee, or, with its fees omitted, was charged at the base fee. Calls that `eth_call` validates and charges are still validated and charged, each call in a `trace_callMany` bundle is priced on its own, and, as in `eth_call`, a nonce above the sender's is accepted. A `trace_call` that fails validation now returns the reason, such as `Gas price below current base fee` (`-32009`), instead of `Internal error`. [#11404](https://github.com/besu-eth/besu/pull/11404)
 
@@ -22,7 +23,6 @@
   - The plugin lifecycle is being redesigned. The phases a plugin goes through, the services available in each of them, and the way a plugin obtains those services are all expected to change, and the changes will not be source compatible.
   - `PluginVersionsProvider`, `plugin.data.Request`, `plugin.data.Restriction`, `plugin.data.UnsignedPrivateMarkerTransaction` and `plugin.data.Signature` are deprecated for removal, with no replacement. None is reachable through any plugin service or data contract: the three privacy types were orphaned when private transaction support was removed, `Request` is implemented internally but never exposed, and `PluginVersionsProvider` is internal `--version` plumbing
 - `--Xbft-legacy-protocol-encoding` will be removed once Besu 25.x is no longer supported. [#10499](https://github.com/besu-eth/besu/pull/10499)
-- `--Xsnapsync-synchronizer-pivot-block-distance-before-caching` is deprecated (since 26.6.1) and will be removed in a future release; the flag is now a silent no-op.
 - `--snapsync-synchronizer-pre-checkpoint-headers-only-enabled` is deprecated (since 26.8.1) and will be removed in a future release; the flag is now a silent no-op.
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
 
