@@ -39,8 +39,8 @@
 
 ### Security Fixes
 - [GHSA-g5j7-4r2x-rx9j](https://github.com/besu-eth/besu/security/advisories/GHSA-g5j7-4r2x-rx9j): Permissionless non-validator peer can halt QBFT finality via pre-authorization proposal decoding
-- [GHSA-qfmh-cxw4-9h66](https://github.com/besu-eth/besu/security/advisories/GHSA-qfmh-cxw4-9h66): debug_traceBlock/ByHash/ByNumber/Transaction unbounded step output — remote DoS
-- [GHSA-8j3g-67qm-7rqp](https://github.com/besu-eth/besu/security/advisories/GHSA-8j3g-67qm-7rqp): snap isValidRangeProof accepts non-empty ranges as valid — soundness gap in snap sync
+- [GHSA-qfmh-cxw4-9h66](https://github.com/besu-eth/besu/security/advisories/GHSA-qfmh-cxw4-9h66): debug_traceBlock/ByHash/ByNumber/Transaction unbounded step output - remote DoS
+- [GHSA-8j3g-67qm-7rqp](https://github.com/besu-eth/besu/security/advisories/GHSA-8j3g-67qm-7rqp): snap isValidRangeProof accepts non-empty ranges as valid - soundness gap in snap sync
 
 ### Breaking Changes
 - `BlockSimulationParameter.Builder.enforceConsensusGasLimitCaps()` is renamed to `enforceConsensusGasLimit()`. The flag now also controls whether the EIP-1559 gas limit adjustment algorithm is applied: when `true` (plugin/block-production path) `getNextGasLimit()` is used; when `false` (default, `eth_simulateV1` path) the parent gas limit is inherited unchanged, matching geth and Nethermind. [#11254](https://github.com/besu-eth/besu/pull/11254)
@@ -105,15 +105,15 @@
 
 ### Security Fixes
 - [GHSA-p4h2-gvh4-pv6j](https://github.com/besu-eth/besu/security/advisories/GHSA-p4h2-gvh4-pv6j): QBFT Byzantine validator can mint native currency via unvalidated withdrawals
-- [GHSA-p6f8-q9mp-7mj9](https://github.com/besu-eth/besu/security/advisories/GHSA-p6f8-q9mp-7mj9): Log filter/subscription address lists unbounded on block-import thread
+- [GHSA-p6f8-q9mp-7mj9](https://github.com/besu-eth/besu/security/advisories/GHSA-p6f8-q9mp-7mj9): Log filter/subscription address lists unbounded on block-import thread - stalls block production
 - [GHSA-f429-4669-7rpx](https://github.com/besu-eth/besu/security/advisories/GHSA-f429-4669-7rpx): Engine API JWT secret exposed in logs on ephemeral key write failure
-- [GHSA-hmg2-5mmq-gv7c](https://github.com/besu-eth/besu/security/advisories/GHSA-hmg2-5mmq-gv7c): EIP-7825 per-block gas cap compared as signed long
-- [GHSA-jxwx-rxf9-pg2g](https://github.com/besu-eth/besu/security/advisories/GHSA-jxwx-rxf9-pg2g): JWT algorithm confusion — HMAC accepted with public key file
-- [GHSA-g499-x5x3-8gjj](https://github.com/besu-eth/besu/security/advisories/GHSA-g499-x5x3-8gjj): GraphQL logs(filter) unbounded block range
-- [GHSA-rw6m-h55m-hggm](https://github.com/besu-eth/besu/security/advisories/GHSA-rw6m-h55m-hggm): Transaction pool has no per-transaction encoded-size cap
-- [GHSA-h552-3fxr-chmx](https://github.com/besu-eth/besu/security/advisories/GHSA-h552-3fxr-chmx): Snap storage-range count amplification — tiny returned slot hash yields unbounded child-range count
-- [GHSA-pr92-c4mc-x48r](https://github.com/besu-eth/besu/security/advisories/GHSA-pr92-c4mc-x48r): P256VerifyPrecompile writes directly to System.err — log amplification via EVM execution
-- [GHSA-h594-ww62-rcxv](https://github.com/besu-eth/besu/security/advisories/GHSA-h594-ww62-rcxv): Invalid discv4 packet triggers unbounded log amplification — unauthenticated remote DoS
+- [GHSA-hmg2-5mmq-gv7c](https://github.com/besu-eth/besu/security/advisories/GHSA-hmg2-5mmq-gv7c): EIP-7825 per-block gas cap compared as signed long - per-block gas-cap bypass
+- [GHSA-jxwx-rxf9-pg2g](https://github.com/besu-eth/besu/security/advisories/GHSA-jxwx-rxf9-pg2g): JWT algorithm confusion - HMAC accepted with public key file
+- [GHSA-g499-x5x3-8gjj](https://github.com/besu-eth/besu/security/advisories/GHSA-g499-x5x3-8gjj): GraphQL logs(filter) unbounded block range - remote DoS
+- [GHSA-rw6m-h55m-hggm](https://github.com/besu-eth/besu/security/advisories/GHSA-rw6m-h55m-hggm): Transaction pool has no per-transaction encoded-size cap - peers penalize/disconnect the relaying node
+- [GHSA-h552-3fxr-chmx](https://github.com/besu-eth/besu/security/advisories/GHSA-h552-3fxr-chmx): Snap storage-range count amplification - tiny returned slot hash yields unbounded child-range count
+- [GHSA-pr92-c4mc-x48r](https://github.com/besu-eth/besu/security/advisories/GHSA-pr92-c4mc-x48r): P256VerifyPrecompile writes directly to System.err - log amplification via EVM execution
+- [GHSA-h594-ww62-rcxv](https://github.com/besu-eth/besu/security/advisories/GHSA-h594-ww62-rcxv): Invalid DiscV4 packet triggers unbounded log amplification - unauthenticated remote DoS
 - [GHSA-m886-r6ch-pjvr](https://github.com/besu-eth/besu/security/advisories/GHSA-m886-r6ch-pjvr): QBFT/IBFT2 message decode performs unbounded eager signature recovery before the validator check - DoS
 
 ### Breaking Changes
@@ -199,16 +199,16 @@
 ## 26.8.0
 
 ### Security Fixes
-- [GHSA-xw6x-9526-6w9r](https://github.com/besu-eth/besu/security/advisories/GHSA-xw6x-9526-6w9r): DiscV4 UDP discovery inbound packet pipeline unbounded — remote DoS
-- [GHSA-6r9q-wjp4-34gh](https://github.com/besu-eth/besu/security/advisories/GHSA-6r9q-wjp4-34gh): Pre-STATUS RLPx connections excluded from --max-peers accounting
-- [GHSA-pcv4-pxhv-99m7](https://github.com/besu-eth/besu/security/advisories/GHSA-pcv4-pxhv-99m7): Snap server schedules unbounded native thread per inbound GET request
+- [GHSA-xw6x-9526-6w9r](https://github.com/besu-eth/besu/security/advisories/GHSA-xw6x-9526-6w9r): DiscV4 UDP discovery inbound packet pipeline unbounded - remote DoS
+- [GHSA-6r9q-wjp4-34gh](https://github.com/besu-eth/besu/security/advisories/GHSA-6r9q-wjp4-34gh): Pre-STATUS RLPx connections excluded from --max-peers accounting - --max-peers bypass
+- [GHSA-pcv4-pxhv-99m7](https://github.com/besu-eth/besu/security/advisories/GHSA-pcv4-pxhv-99m7): Snap server schedules unbounded native thread per inbound GET request - remote resource-exhaustion DoS
 - [GHSA-4776-8c3f-fx7g](https://github.com/besu-eth/besu/security/advisories/GHSA-4776-8c3f-fx7g): debug_traceCall unbounded step output causes OOM and consensus drop
-- [GHSA-9w9r-w3rf-j6vj](https://github.com/besu-eth/besu/security/advisories/GHSA-9w9r-w3rf-j6vj): eth_getFilterLogs and eth_newFilter missing maxLogRange enforcement
-- [GHSA-23rh-rrqg-wq82](https://github.com/besu-eth/besu/security/advisories/GHSA-23rh-rrqg-wq82): QBFT/IBFT round-change cache unbounded — single validator can exhaust heap
-- [GHSA-8g2r-qvch-4c9j](https://github.com/besu-eth/besu/security/advisories/GHSA-8g2r-qvch-4c9j): GraphQL blocks(from, to) range queries unbounded
-- [GHSA-xg9p-226c-vxvw](https://github.com/besu-eth/besu/security/advisories/GHSA-xg9p-226c-vxvw): Bonsai parallel block processor retains transaction futures after block rejection — memory exhaustion and node outage
-- [GHSA-cgvq-9xfq-c54j](https://github.com/besu-eth/besu/security/advisories/GHSA-cgvq-9xfq-c54j): Fixed a consensus split where RLP-wrapped typed transactions were accepted by Besu but rejected by other clients
-- [GHSA-4h4f-925g-8h9p](https://github.com/besu-eth/besu/security/advisories/GHSA-4h4f-925g-8h9p): Fixed a consensus split where EIP-7702 recovery skipped the secp256k1 curve-order bound 
+- [GHSA-9w9r-w3rf-j6vj](https://github.com/besu-eth/besu/security/advisories/GHSA-9w9r-w3rf-j6vj): eth_getFilterLogs and eth_newFilter missing maxLogRange enforcement - unbounded log-query DoS
+- [GHSA-23rh-rrqg-wq82](https://github.com/besu-eth/besu/security/advisories/GHSA-23rh-rrqg-wq82): QBFT/IBFT round-change cache unbounded - single validator can exhaust heap
+- [GHSA-8g2r-qvch-4c9j](https://github.com/besu-eth/besu/security/advisories/GHSA-8g2r-qvch-4c9j): GraphQL blocks(from, to) range queries unbounded - remote DoS
+- [GHSA-xg9p-226c-vxvw](https://github.com/besu-eth/besu/security/advisories/GHSA-xg9p-226c-vxvw): Bonsai parallel block processor retains transaction futures after block rejection - memory exhaustion and node outage
+- [GHSA-cgvq-9xfq-c54j](https://github.com/besu-eth/besu/security/advisories/GHSA-cgvq-9xfq-c54j): RLP-wrapped typed transactions accepted in ExecutionPayload block bodies - client-line consensus split
+- [GHSA-4h4f-925g-8h9p](https://github.com/besu-eth/besu/security/advisories/GHSA-4h4f-925g-8h9p): EIP-7702 and sender signature recovery skip the secp256k1 curve-order bound - native vs BouncyCastle consensus split
 
 ### Upcoming Breaking Changes
 - `--min-block-occupancy-ratio` is deprecated and will be removed in a future release
@@ -266,14 +266,14 @@
 ## 26.7.1
 
 ### Security Fixes
-- [GHSA-qhrf-865g-38rh](https://github.com/besu-eth/besu/security/advisories/GHSA-qhrf-865g-38rh): FutureMessageBuffer unbounded by byte size — oversized BFT proposals cause OOM
-- [GHSA-j2cm-8hc2-6975](https://github.com/besu-eth/besu/security/advisories/GHSA-j2cm-8hc2-6975): SELFDESTRUCT markers applied from failed transactions — EIP-6780 semantics violated
-- [GHSA-65m7-wvhv-9gch](https://github.com/besu-eth/besu/security/advisories/GHSA-65m7-wvhv-9gch): Precompile result cache keyed by 32-bit hashCode — hash collision allows cache poisoning
+- [GHSA-qhrf-865g-38rh](https://github.com/besu-eth/besu/security/advisories/GHSA-qhrf-865g-38rh): FutureMessageBuffer unbounded by byte size - oversized BFT proposals cause OOM
+- [GHSA-j2cm-8hc2-6975](https://github.com/besu-eth/besu/security/advisories/GHSA-j2cm-8hc2-6975): SELFDESTRUCT markers applied from failed transactions - EIP-6780 semantics violated
+- [GHSA-65m7-wvhv-9gch](https://github.com/besu-eth/besu/security/advisories/GHSA-65m7-wvhv-9gch): Precompile result cache keyed by 32-bit hashCode - hash collision allows cache poisoning
 - [GHSA-m2pj-j62h-7jwm](https://github.com/besu-eth/besu/security/advisories/GHSA-m2pj-j62h-7jwm): Per-transaction O(N²) HashDoS via EVM warm-access and transient-storage hash-bucket collisions
-- [GHSA-ffqr-pj4h-xq37](https://github.com/besu-eth/besu/security/advisories/GHSA-ffqr-pj4h-xq37): eth_subscribe allows unbounded WebSocket subscription creation
+- [GHSA-ffqr-pj4h-xq37](https://github.com/besu-eth/besu/security/advisories/GHSA-ffqr-pj4h-xq37): eth_subscribe allows unbounded WebSocket subscription creation - resource-exhaustion DoS
 - [GHSA-j2j5-x2rr-cv75](https://github.com/besu-eth/besu/security/advisories/GHSA-j2j5-x2rr-cv75): Single devp2p peer can drive unbounded block-fetch work via repeated announcements
-- [GHSA-mqqm-3pp2-ff8j](https://github.com/besu-eth/besu/security/advisories/GHSA-mqqm-3pp2-ff8j): Post-Prague block header missing requestsHash field accepted without validation
-- [GHSA-vff7-xxjc-rccp](https://github.com/besu-eth/besu/security/advisories/GHSA-vff7-xxjc-rccp): FilterRepository stores all filters in unbounded map — no expiry or cap
+- [GHSA-mqqm-3pp2-ff8j](https://github.com/besu-eth/besu/security/advisories/GHSA-mqqm-3pp2-ff8j): Post-Prague block header missing requestsHash field accepted without validation - header validation bypass
+- [GHSA-vff7-xxjc-rccp](https://github.com/besu-eth/besu/security/advisories/GHSA-vff7-xxjc-rccp): FilterRepository stores all filters in unbounded map - no expiry or cap
 
 ### Breaking Changes
 - If you are a heavy user of `eth_newFilter`/`eth_newBlockFilter`/`eth_newPendingTransactionFilter` RPC methods, you may need to review the default values of the new configuration options `--rpc-max-active-filters` (default `1000`; `0` = no limit) which rejects filter creation past the cap, and `--rpc-filter-timeout-seconds` (seconds; default 120) which makes the previously hardcoded 10-minute filter expiry configurable.
