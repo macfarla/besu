@@ -90,6 +90,7 @@
 - Backward sync no longer re-executes a block already known as bad, and a bad-block entry for a block found on the chain is forgotten together with the descendants marked on its account. [#11373](https://github.com/besu-eth/besu/pull/11373)
 
 ### Additions and Improvements
+- Remove quadratic per-transaction cost in parallel transaction collision detection (Bonsai block import) [#11378](https://github.com/besu-eth/besu/pull/11378)
 - Plugin API: the `BesuEvents` event families move onto the feature services that own them. `BlockchainService` gains `subscribeBlockPropagated`, `subscribeBlockAdded`, `subscribeBlockReorg`, `subscribeLogs` and `subscribeBadBlock`; `TransactionPoolService` gains `subscribeTransactionAdded` and `subscribeTransactionDropped`; `SynchronizationService` gains `subscribeSyncStatus` and `subscribeInitialSyncCompletion`. Each returns a `Subscription` whose `close()` unsubscribes that one listener, replacing the `long` id and paired `remove*` method, so an id can no longer be handed to the wrong family's remover, and initial sync completion becomes unsubscribable for the first time. The listener interfaces keep their signatures and move out of `BesuEvents` into an `spi` package in each module. `BesuEvents` keeps working unchanged and is deprecated. [#11283](https://github.com/besu-eth/besu/pull/11283)
 - Implement native `callTracer` execution tracing, reducing memory use for `debug_trace*`. [#11077](https://github.com/besu-eth/besu/pull/11077)
 - Implement native `4byteTracer` execution tracing, reducing memory use for `debug_trace*`. [#11271](https://github.com/besu-eth/besu/pull/11271)
@@ -113,6 +114,7 @@
 - [GHSA-h552-3fxr-chmx](https://github.com/besu-eth/besu/security/advisories/GHSA-h552-3fxr-chmx): Snap storage-range count amplification — tiny returned slot hash yields unbounded child-range count
 - [GHSA-pr92-c4mc-x48r](https://github.com/besu-eth/besu/security/advisories/GHSA-pr92-c4mc-x48r): P256VerifyPrecompile writes directly to System.err — log amplification via EVM execution
 - [GHSA-h594-ww62-rcxv](https://github.com/besu-eth/besu/security/advisories/GHSA-h594-ww62-rcxv): Invalid discv4 packet triggers unbounded log amplification — unauthenticated remote DoS
+- [GHSA-m886-r6ch-pjvr](https://github.com/besu-eth/besu/security/advisories/GHSA-m886-r6ch-pjvr): QBFT/IBFT2 message decode performs unbounded eager signature recovery before the validator check - DoS
 
 ### Breaking Changes
 - JSON-RPC `eth_newFilter` and `eth_subscribe` (logs) now cap the number of addresses per filter at 1000 by default. Requests exceeding the limit are rejected with a `-32005` error. Configure via `--rpc-max-log-filter-addresses` (set to `0` for no limit).
@@ -205,6 +207,8 @@
 - [GHSA-23rh-rrqg-wq82](https://github.com/besu-eth/besu/security/advisories/GHSA-23rh-rrqg-wq82): QBFT/IBFT round-change cache unbounded — single validator can exhaust heap
 - [GHSA-8g2r-qvch-4c9j](https://github.com/besu-eth/besu/security/advisories/GHSA-8g2r-qvch-4c9j): GraphQL blocks(from, to) range queries unbounded
 - [GHSA-xg9p-226c-vxvw](https://github.com/besu-eth/besu/security/advisories/GHSA-xg9p-226c-vxvw): Bonsai parallel block processor retains transaction futures after block rejection — memory exhaustion and node outage
+- [GHSA-cgvq-9xfq-c54j](https://github.com/besu-eth/besu/security/advisories/GHSA-cgvq-9xfq-c54j): Fixed a consensus split where RLP-wrapped typed transactions were accepted by Besu but rejected by other clients
+- [GHSA-4h4f-925g-8h9p](https://github.com/besu-eth/besu/security/advisories/GHSA-4h4f-925g-8h9p): Fixed a consensus split where EIP-7702 recovery skipped the secp256k1 curve-order bound 
 
 ### Upcoming Breaking Changes
 - `--min-block-occupancy-ratio` is deprecated and will be removed in a future release
@@ -223,18 +227,7 @@
 - Removed the legacy `PANTHEON_` environment variable prefix for configuration options, everyone should already use the `BESU_` prefix at this time.
 
 ### Bug fixes
-- Abort pending speculative transaction futures when the block-budget is exhausted in parallel block production.
-- Bound the DiscV4 inbound packet pipeline with an admission gate (256 in-flight packets) and a bounded crypto executor queue, preventing a UDP flood from exhausting memory.
-- Cap the number of snap/1-2 GET_* requests concurrently scheduled for processing on a snap-serving node, both per-peer (--Xsnapsync-server-max-concurrent-requests-per-peer, default 8) and globally (--Xsnapsync-server-max-concurrent-requests, default 200). [#11101](https://github.com/besu-eth/besu/pull/11101)
-- Cap the QBFT/IBFT round change number to prevent unbounded memory growth from malformed round-change messages.
-- Improve logging for malformed discv4 UDP packets.
-- Bound the snap sync storage sub-range split count to prevent unbounded memory growth under a malformed snap response.
-- Added a configurable range cap (--graphql-max-blocks-range, default 5000) for GraphQL blocks(from, to) range queries; queries exceeding the cap are cancelled.
-- Bound secp256k1 signature r and s values to [1, n) on signature recovery, fixing a consensus divergence with EIP-7702 code delegations.
-- Add a server-side cap on EVM steps captured per debug_traceCall, debug_traceTransaction, and related trace methods to prevent unbounded execution [#11100](https://github.com/besu-eth/besu/pull/11100)
-- Apply --rpc-max-logs-range to eth_getFilterLogs and eth_newFilter to prevent unbounded log queries.
 - Fix optimistic parallel execution materialising an empty account for an unrewarded fee recipient, causing incorrect EIP-158 account deletion.
-- Remove `System.out`/`System.err` logging from `P256VerifyPrecompiledContract` and `BlockchainQueries` — these could leak sensitive data to stdout/stderr in production.
 - EIP-1459 DNS discovery now rejoins TXT records split across multiple `<character-string>`s. Records longer than 255 bytes were truncated, so Besu silently discarded most of every tree, resolving 832 of 3000 nodes from the mainnet tree. [#10985](https://github.com/besu-eth/besu/pull/10985)
 - Queue backward-sync targets received before peer readiness and retry when a peer connects. [#10843](https://github.com/besu-eth/besu/pull/10843)
 - Return `BLOCK_NOT_FOUND` for unknown block hashes and `GENESIS_BLOCK_NOT_TRACEABLE` for genesis blocks from `debug_traceBlockByHash`. [#10701](https://github.com/besu-eth/besu/pull/10701)
@@ -249,9 +242,7 @@
 - Fix `ibft_*` and `qbft_*` JSON-RPC methods returning `Method not enabled` on IBFT2->QBFT migration networks (genesis containing both `ibft2` and `qbft` sections). [#10679](https://github.com/besu-eth/besu/issues/10679)
 - Fix `admin_nodeInfo` reporting wrong RLPx/discovery ephemeral ports under `--nat-method=DOCKER`, due to a swapped NAT port mapping and a stale pre-bind snapshot. [#10860](https://github.com/besu-eth/besu/pull/10860)
 - Recover from restart during flatDB heal sync step [#10883](https://github.com/besu-eth/besu/pull/10883)
-- Cap pre-STATUS RLPx connections and close them on eviction to prevent resource exhaustion.
 - Fix txpool incorrectly evicting authority pending transactions when EIP-7702 delegation tuples are skipped during block execution
-- Reject RLP-wrapped typed transactions in block-body opaque decoding, preventing a potential consensus divergence.
 - Reject an EIP-7928 block access list whose `uint256` fields are not minimally encoded, and report an undecodable `blockAccessList` as an invalid payload rather than an invalid-params error, per [execution-apis#869](https://github.com/ethereum/execution-apis/pull/869); re-applies [#11177](https://github.com/besu-eth/besu/pull/11177) (reverted in [#11219](https://github.com/besu-eth/besu/pull/11219)) with a narrower trigger.
 
 ### Additions and Improvements
